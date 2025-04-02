@@ -36,7 +36,7 @@ export default function Footer() {
               </svg>
             </div>
             <center className="text-slate-400 max-w-xs">
-              Real-time code collaboration centerlatform for modern development
+              Real-time code collaboration center platform for modern development
               teams.
             </center>
           </div>

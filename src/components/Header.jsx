@@ -149,7 +149,7 @@ export default function Header() {
           Login
           </button>
 
-          <button className="border border-black bg-white text-black px-4 py-2 rounded-md hover:bg-[#878788] transition">
+          <button className="border border-black bg-white text-black px-4 py-2 rounded-md hover:bg-`${[#878788]` transition">
              Sign Up
           </button>
 
