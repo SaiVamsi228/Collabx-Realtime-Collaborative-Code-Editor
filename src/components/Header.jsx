@@ -26,7 +26,7 @@ export default function Header() {
       className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all transition-slow duration-700",
         isScrolled
-          ? "bg-white/100 backdrop-blur-md shadow-sm"
+          ? "bg-[hsl(0, 0%, 95%)]/100 backdrop-blur-md shadow-sm"
           : "bg-transparent"
       )}
     >
