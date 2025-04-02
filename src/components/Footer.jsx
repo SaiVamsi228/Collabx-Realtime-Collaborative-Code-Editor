@@ -6,7 +6,7 @@ export default function Footer() {
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
           <div>
-            <div className="text-2xl font-bold text-primary mb-4">
+            <div className="text-xl font-bold text-primary mb-4">
               <svg
                 width="198.82437744140623"
                 height="76.76786943937378"
