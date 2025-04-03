@@ -10,6 +10,7 @@ import {
   googleProvider,
   githubProvider,
 } from "../firebase.js";
+import Footer from "./Footer.jsx";
 
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -205,7 +206,8 @@ const AuthPage = () => {
           </div>
         </div>
       </header>
-      <div className=" flex flex-col items-center bg-gray-100">
+      <div className="card-container min-h-screen bg-gray-100">
+      <div className=" flex flex-col items-center  mb-20">
         <div className="flex-grow flex justify-center items-center pt-20">
           <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md text-center min-h-[72vh]">
             <div className="flex bg-gray-200 rounded-lg overflow-hidden mb-6">
@@ -304,6 +306,8 @@ const AuthPage = () => {
           </div>
         </div>
       </div>
+      </div>
+      <Footer/>
     </>
   );
 };
