@@ -5,6 +5,7 @@ import Features from '@/components/Features';
 import Demo from '@/components/Demo';
 import Testimonials from '@/components/Testimonials';
 import CTA from '@/components/CTA';
+import AuthPage from '@/components/AuthPage';
 import Footer from '@/components/Footer';
 
 export default function Home() {

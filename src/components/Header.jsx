@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { Link } from 'react-router-dom';
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -145,13 +146,8 @@ export default function Header() {
           >
             Testimonials
           </a>
-          <button className="border border-black bg-black text-white px-4 py-2 rounded-md">
-          Login
-          </button>
-
-          <button className="border border-black bg-white text-black px-4 py-2 rounded-md hover:bg-`${[#878788]` transition">
-             Sign Up
-          </button>
+          <Link to="/auth" className="px-5 py-2 text-white bg-black rounded-md ">Login</Link>
+          <Link to="/auth?signup=true" className="px-4 py-2 bg-white font-medium border border-black-2 text-black rounded-md ">Sign Up</Link>
 
 
           {/* Theme Toggle Button */}
