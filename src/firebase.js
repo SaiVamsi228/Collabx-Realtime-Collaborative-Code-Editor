@@ -18,7 +18,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyDpdS8FgbNqWmTtlRLBw7onOVdK2rW7bgE",
   authDomain: "rtce-4df05.firebaseapp.com",
   projectId: "rtce-4df05",
-  storageBucket: "rtce-4df05.appspot.com",
+  storageBucket: "rtce-4df05.firebasestorage.app",
   messagingSenderId: "634860330071",
   appId: "1:634860330071:web:fcd4187460a85517005712",
   measurementId: "G-2M9J12VWRM"
