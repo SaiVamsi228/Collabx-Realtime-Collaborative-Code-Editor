@@ -39,51 +39,52 @@ const AuthPage = () => {
       try {
         const response = await getRedirectResult(auth);
         console.log(response);
+        navigate("/dashboard");
       } catch (error) {
         console.error("Error verifying auth:", error);
       }
     };
 
     verifyAuth();
-    
+
   },[])
 
-  useEffect(() => {
-    let unsubscribe;
+  // useEffect(() => {
+  //   let unsubscribe;
 
-    // Handle redirect result first
-    setLoading(true);
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) {
-          console.log("Redirect result - User:", result.user);
-          navigate("/dashboard");
-          // Navigation will happen via onAuthStateChanged
-        } else {
-          console.log("No redirect result yet");
-        }
-      })
-      .catch((err) => {
-        console.error("getRedirectResult error:", err);
-        setError(getErrorMessage(err.code));
-        setLoading(false);
-      });
+  //   // Handle redirect result first
+  //   setLoading(true);
+  //   getRedirectResult(auth)
+  //     .then((result) => {
+  //       if (result?.user) {
+  //         console.log("Redirect result - User:", result.user);
+  //         navigate("/dashboard");
+  //         // Navigation will happen via onAuthStateChanged
+  //       } else {
+  //         console.log("No redirect result yet");
+  //       }
+  //     })
+  //     .catch((err) => {
+  //       console.error("getRedirectResult error:", err);
+  //       setError(getErrorMessage(err.code));
+  //       setLoading(false);
+  //     });
 
-    // Set up auth state listener
-    unsubscribe = auth.onAuthStateChanged((user) => {
-      console.log("onAuthStateChanged fired - User:", user);
-      if (user) {
-        console.log("Navigating to dashboard for user:", user.uid);
-        navigate("/dashboard");
-      }
-      setLoading(false); // Reset loading once state is resolved
-    });
+  //   // Set up auth state listener
+  //   unsubscribe = auth.onAuthStateChanged((user) => {
+  //     console.log("onAuthStateChanged fired - User:", user);
+  //     if (user) {
+  //       console.log("Navigating to dashboard for user:", user.uid);
+        
+  //     }
+  //     setLoading(false); // Reset loading once state is resolved
+  //   });
 
-    return () => {
-      console.log("Cleaning up listener");
-      unsubscribe();
-    };
-  }, []);
+  //   return () => {
+  //     console.log("Cleaning up listener");
+  //     unsubscribe();
+  //   };
+  // }, []);
 
   const getErrorMessage = (errorCode) => {
     switch (errorCode) {
