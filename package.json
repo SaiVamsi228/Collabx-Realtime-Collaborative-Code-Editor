@@ -10,11 +10,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^6.7.2",
+    "@fortawesome/free-solid-svg-icons": "^6.7.2",
+    "@fortawesome/react-fontawesome": "^0.2.2",
     "@tailwindcss/postcss7-compat": "^2.2.17",
     "clsx": "^2.1.1",
+    "firebase": "^11.6.0",
     "lucide-react": "^0.486.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-firebase-hooks": "^5.1.1",
+    "react-router-dom": "^7.4.1",
     "tailwind-merge": "^3.1.0",
     "typed.js": "^2.1.0"
   },

@@ -7,6 +7,7 @@ import Testimonials from '@/components/Testimonials';
 import CTA from '@/components/CTA';
 import AuthPage from '@/components/AuthPage';
 import Footer from '@/components/Footer';
+import SessionManager from '@/components/SessionManager';
 
 export default function Home() {
   const sectionRefs = useRef([]);
@@ -42,6 +43,7 @@ export default function Home() {
       <section ref={addToRefs}><Testimonials /></section>
       <section ref={addToRefs}><CTA /></section>
       <Footer />
+      {/* <SessionManager></SessionManager> */}
     </main>
   );
 }
