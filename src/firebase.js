@@ -1,18 +1,18 @@
-// src/firebase.js
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  GoogleAuthProvider, 
-  GithubAuthProvider, 
-  signInWithRedirect, 
-  getRedirectResult, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  sendPasswordResetEmail, 
-  setPersistence, 
-  browserLocalPersistence 
-} from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+// firebase.js
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  GithubAuthProvider,
+  signInWithRedirect,
+  getRedirectResult,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  browserLocalPersistence,
+  setPersistence,
+} from "firebase/auth";
+import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDpdS8FgbNqWmTtlRLBw7onOVdK2rW7bgE",
@@ -24,34 +24,27 @@ const firebaseConfig = {
   measurementId: "G-2M9J12VWRM"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
-
-// Set persistence to LOCAL
-const initializeAuthPersistence = async () => {
-  try {
-    await setPersistence(auth, browserLocalPersistence);
-    console.log('Auth persistence set to LOCAL');
-  } catch (err) {
-    console.error('Failed to set persistence:', err);
-  }
-};
-
-initializeAuthPersistence();
+const analytics = getAnalytics(app);
 
 const googleProvider = new GoogleAuthProvider();
 const githubProvider = new GithubAuthProvider();
 
-export { 
-  auth, 
-  db, 
-  googleProvider, 
-  githubProvider, 
-  signInWithRedirect, 
-  getRedirectResult, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  sendPasswordResetEmail 
+googleProvider.setCustomParameters({ prompt: "select_account" });
+
+setPersistence(auth, browserLocalPersistence)
+  .then(() => console.log("Auth persistence set to LOCAL"))
+  .catch((err) => console.error("Persistence error:", err));
+
+export {
+  auth,
+  googleProvider,
+  githubProvider,
+  signInWithRedirect,
+  getRedirectResult,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  analytics,
 };

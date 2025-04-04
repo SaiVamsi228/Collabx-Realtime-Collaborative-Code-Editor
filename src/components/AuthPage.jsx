@@ -1,3 +1,4 @@
+// AuthPage.jsx
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -12,7 +13,6 @@ import {
 } from "../firebase.js";
 import Footer from "./Footer.jsx";
 
-// import { getRedirectResult } from "../firebase.js";
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -32,59 +32,46 @@ const AuthPage = () => {
   }, [location]);
 
   // Auth state listener and redirect handling
+  useEffect(() => {
+    console.log("useEffect: Setting up auth listener");
 
-  useEffect(()=>{
-
-    const verifyAuth = async () => {
+    const handleRedirect = async () => {
       try {
-        const response = await getRedirectResult(auth);
-        console.log(response);
-        navigate("/dashboard");
-      } catch (error) {
-        console.error("Error verifying auth:", error);
+        console.log("Checking redirect result at URL:", window.location.href);
+        const result = await getRedirectResult(auth);
+        console.log("Redirect result:", result);
+        if (result?.user) {
+          console.log("Redirect successful, user:", result.user.uid);
+          console.log("User details:", result.user);
+          navigate("/dashboard");
+        } else {
+          console.log("No redirect result - redirect may not have completed");
+        }
+      } catch (err) {
+        console.error("Redirect error:", err);
+        setError(getErrorMessage(err.code) || "Authentication failed after redirect.");
+        setLoading(false);
       }
     };
 
-    verifyAuth();
+    handleRedirect();
 
-  },[])
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      console.log("onAuthStateChanged fired - User:", user);
+      if (user) {
+        console.log("User authenticated, navigating to dashboard:", user.uid);
+        navigate("/dashboard");
+      } else {
+        console.log("No user authenticated yet - waiting for redirect sync");
+        setLoading(false);
+      }
+    });
 
-  // useEffect(() => {
-  //   let unsubscribe;
-
-  //   // Handle redirect result first
-  //   setLoading(true);
-  //   getRedirectResult(auth)
-  //     .then((result) => {
-  //       if (result?.user) {
-  //         console.log("Redirect result - User:", result.user);
-  //         navigate("/dashboard");
-  //         // Navigation will happen via onAuthStateChanged
-  //       } else {
-  //         console.log("No redirect result yet");
-  //       }
-  //     })
-  //     .catch((err) => {
-  //       console.error("getRedirectResult error:", err);
-  //       setError(getErrorMessage(err.code));
-  //       setLoading(false);
-  //     });
-
-  //   // Set up auth state listener
-  //   unsubscribe = auth.onAuthStateChanged((user) => {
-  //     console.log("onAuthStateChanged fired - User:", user);
-  //     if (user) {
-  //       console.log("Navigating to dashboard for user:", user.uid);
-        
-  //     }
-  //     setLoading(false); // Reset loading once state is resolved
-  //   });
-
-  //   return () => {
-  //     console.log("Cleaning up listener");
-  //     unsubscribe();
-  //   };
-  // }, []);
+    return () => {
+      console.log("Cleaning up auth listener");
+      unsubscribe();
+    };
+  }, [navigate]);
 
   const getErrorMessage = (errorCode) => {
     switch (errorCode) {
@@ -112,11 +99,12 @@ const AuthPage = () => {
     setError("");
     setSuccess("");
     try {
-      console.log("Starting Google sign-in with redirect");
+      console.log("Initiating Google redirect with provider:", googleProvider);
       await signInWithRedirect(auth, googleProvider);
+      console.log("Google redirect initiated"); // Won’t log due to redirect
     } catch (err) {
-      console.error("Google login error:", err);
-      setError(getErrorMessage(err.code));
+      console.error("Google login error before redirect:", err);
+      setError(getErrorMessage(err.code) || "Google login failed.");
       setLoading(false);
     }
   };
@@ -126,11 +114,12 @@ const AuthPage = () => {
     setError("");
     setSuccess("");
     try {
-      console.log("Starting GitHub sign-in with redirect");
+      console.log("Initiating GitHub redirect with provider:", githubProvider);
       await signInWithRedirect(auth, githubProvider);
+      console.log("GitHub redirect initiated"); // Won’t log due to redirect
     } catch (err) {
-      console.error("GitHub login error:", err);
-      setError(getErrorMessage(err.code));
+      console.error("GitHub login error before redirect:", err);
+      setError(getErrorMessage(err.code) || "GitHub login failed.");
       setLoading(false);
     }
   };
@@ -142,12 +131,15 @@ const AuthPage = () => {
     setSuccess("");
     try {
       if (isLogin) {
-        console.log("Signing in with email/password");
+        console.log("Attempting email login");
         await signInWithEmailAndPassword(auth, email, password);
+        console.log("Email login successful, current user:", auth.currentUser);
       } else {
-        console.log("Creating user with email/password");
+        console.log("Attempting email signup");
         await createUserWithEmailAndPassword(auth, email, password);
+        console.log("Email signup successful, current user:", auth.currentUser);
       }
+      navigate("/dashboard");
     } catch (err) {
       console.error("Email auth error:", err);
       setError(getErrorMessage(err.code));
@@ -174,6 +166,7 @@ const AuthPage = () => {
       setLoading(false);
     }
   };
+
   return (
     <>
       <header className="bg-white/100 backdrop-blur-md shadow-sm">

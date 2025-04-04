@@ -28,7 +28,7 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
 });
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
+  // <React.StrictMode>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
@@ -43,7 +43,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         />
         {/* Redirect unknown routes to home */}
         <Route path="*" element={<Navigate to="/" />} />
+        <Route path="/__/auth/handler" element={<AuthPage />} />
       </Routes>
     </BrowserRouter>
-  </React.StrictMode>
+  // </React.StrictMode>
 );
