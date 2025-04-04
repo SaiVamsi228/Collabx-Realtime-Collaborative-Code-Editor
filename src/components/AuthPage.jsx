@@ -12,6 +12,7 @@ import {
 } from "../firebase.js";
 import Footer from "./Footer.jsx";
 
+// import { getRedirectResult } from "../firebase.js";
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -22,6 +23,7 @@ const AuthPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Handle signup query param
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("signup") === "true") {
@@ -29,38 +31,59 @@ const AuthPage = () => {
     }
   }, [location]);
 
-  useEffect(() => {
-    let unsubscribe;
+  // Auth state listener and redirect handling
 
-    const handleAuth = async () => {
-      setLoading(true);
+  useEffect(()=>{
+
+    const verifyAuth = async () => {
       try {
-        // 1. Check for social login redirect first
-        const result = await getRedirectResult(auth);
-        if (result?.user) {
-          console.log("Social login success:", result.user);
-          return navigate("/dashboard");
-        }
-
-        // 2. Set up auth state listener
-        unsubscribe = auth.onAuthStateChanged((user) => {
-          if (user) {
-            console.log("Auth state changed - user exists:", user);
-            navigate("/dashboard");
-          }
-        });
-
-      } catch (err) {
-        console.error("Auth error:", err);
-        setError(getErrorMessage(err.code));
-      } finally {
-        setLoading(false);
+        const response = await getRedirectResult(auth);
+        console.log(response);
+      } catch (error) {
+        console.error("Error verifying auth:", error);
       }
     };
 
-    handleAuth();
-    return () => unsubscribe?.(); // Cleanup on unmount
-  }, [navigate]);
+    verifyAuth();
+    
+  },[])
+
+  useEffect(() => {
+    let unsubscribe;
+
+    // Handle redirect result first
+    setLoading(true);
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          console.log("Redirect result - User:", result.user);
+          navigate("/dashboard");
+          // Navigation will happen via onAuthStateChanged
+        } else {
+          console.log("No redirect result yet");
+        }
+      })
+      .catch((err) => {
+        console.error("getRedirectResult error:", err);
+        setError(getErrorMessage(err.code));
+        setLoading(false);
+      });
+
+    // Set up auth state listener
+    unsubscribe = auth.onAuthStateChanged((user) => {
+      console.log("onAuthStateChanged fired - User:", user);
+      if (user) {
+        console.log("Navigating to dashboard for user:", user.uid);
+        navigate("/dashboard");
+      }
+      setLoading(false); // Reset loading once state is resolved
+    });
+
+    return () => {
+      console.log("Cleaning up listener");
+      unsubscribe();
+    };
+  }, []);
 
   const getErrorMessage = (errorCode) => {
     switch (errorCode) {
@@ -88,6 +111,7 @@ const AuthPage = () => {
     setError("");
     setSuccess("");
     try {
+      console.log("Starting Google sign-in with redirect");
       await signInWithRedirect(auth, googleProvider);
     } catch (err) {
       console.error("Google login error:", err);
@@ -101,6 +125,7 @@ const AuthPage = () => {
     setError("");
     setSuccess("");
     try {
+      console.log("Starting GitHub sign-in with redirect");
       await signInWithRedirect(auth, githubProvider);
     } catch (err) {
       console.error("GitHub login error:", err);
@@ -116,15 +141,15 @@ const AuthPage = () => {
     setSuccess("");
     try {
       if (isLogin) {
+        console.log("Signing in with email/password");
         await signInWithEmailAndPassword(auth, email, password);
       } else {
+        console.log("Creating user with email/password");
         await createUserWithEmailAndPassword(auth, email, password);
       }
-      // Removed manual navigation - relying on auth state listener
     } catch (err) {
       console.error("Email auth error:", err);
       setError(getErrorMessage(err.code));
-    } finally {
       setLoading(false);
     }
   };
@@ -148,7 +173,6 @@ const AuthPage = () => {
       setLoading(false);
     }
   };
-
   return (
     <>
       <header className="bg-white/100 backdrop-blur-md shadow-sm">
