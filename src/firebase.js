@@ -1,11 +1,9 @@
-// firebase.js
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
   GithubAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup, // Added this
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -21,7 +19,7 @@ const firebaseConfig = {
   storageBucket: "rtce-4df05.firebasestorage.app",
   messagingSenderId: "634860330071",
   appId: "1:634860330071:web:fcd4187460a85517005712",
-  measurementId: "G-2M9J12VWRM"
+  measurementId: "G-2M9J12VWRM",
 };
 
 const app = initializeApp(firebaseConfig);
@@ -41,8 +39,7 @@ export {
   auth,
   googleProvider,
   githubProvider,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup, // Added this
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
