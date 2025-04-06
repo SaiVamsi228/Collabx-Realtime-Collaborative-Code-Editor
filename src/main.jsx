@@ -1,12 +1,14 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import Home from '@/components/Home';
-import AuthPage from '@/components/AuthPage';
-import SessionManager from '@/components/SessionManager';
-import { auth } from '@/firebase.js';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import './styles/globals.css';
+// index.jsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import Home from "@/components/Home";
+import AuthPage from "@/components/AuthPage";
+import SessionManager from "@/components/SessionManager";
+import CodingEnvi from "@/components/CodingEnvi"; // Import the new component
+import { auth } from "@/firebase.js";
+import { useAuthState } from "react-firebase-hooks/auth";
+import "./styles/globals.css";
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -15,39 +17,44 @@ const ProtectedRoute = ({ children }) => {
 
   if (loading) return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
 
-  // If user is logged in and trying to access /auth, redirect to home
-  if (user && location.pathname === '/auth') {
-    return <Navigate to="/" />;
+  if (user && location.pathname === "/auth") {
+    return <Navigate to="/" replace />;
   }
 
-  // For protected routes, redirect to home if not authenticated
-  return user ? children : <Navigate to="/" />;
+  return user ? children : <Navigate to="/" replace />;
 };
 
-// Require Auth Component (opposite of ProtectedRoute)
+// Require No Auth Component
 const RequireNoAuth = ({ children }) => {
   const [user, loading] = useAuthState(auth);
   if (loading) return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
-  return user ? <Navigate to="/" /> : children;
+  return user ? <Navigate to="/" replace /> : children;
 };
 
-// Add smooth scroll behavior for all anchor links
+// Home Route with Redirect for Logged-In Users
+const HomeRoute = () => {
+  const [user, loading] = useAuthState(auth);
+  if (loading) return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
+  return user ? <Navigate to="/dashboard" replace /> : <Home />;
+};
+
+// Add smooth scroll behavior
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-  anchor.addEventListener('click', function (e) {
+  anchor.addEventListener("click", function (e) {
     e.preventDefault();
-    const targetId = this.getAttribute('href');
+    const targetId = this.getAttribute("href");
     const targetElement = document.querySelector(targetId);
     if (targetElement) {
-      targetElement.scrollIntoView({ behavior: 'smooth' });
+      targetElement.scrollIntoView({ behavior: "smooth" });
     }
   });
 });
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<HomeRoute />} />
         <Route
           path="/auth"
           element={
@@ -64,8 +71,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             </ProtectedRoute>
           }
         />
-        {/* Redirect unknown routes to home */}
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route
+          path="/coding-environment"
+          element={
+            <ProtectedRoute>
+              <CodingEnvi />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
