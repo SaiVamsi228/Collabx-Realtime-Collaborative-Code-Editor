@@ -94,12 +94,18 @@ const styles = `
   }
 `;
 
-// Inject styles into the document (alternatively, add to your CSS file)
 const styleSheet = document.createElement("style");
 styleSheet.textContent = styles;
 document.head.appendChild(styleSheet);
 
-const OutputPanel = ({ result, isLoading, error, theme }) => {
+const OutputPanel = ({
+  result,
+  isLoading,
+  error,
+  theme,
+  fetchTime,
+  complexity,
+}) => {
   return (
     <ScrollArea
       className={`h-[200px] p-4 ${
@@ -133,6 +139,16 @@ const OutputPanel = ({ result, isLoading, error, theme }) => {
           <pre className="mt-2 text-xs whitespace-pre-wrap">
             {result.output || "No output generated."}
           </pre>
+          {fetchTime && (
+            <p className="text-xs mt-2">
+              <strong>Fetch Time:</strong> {fetchTime} ms
+            </p>
+          )}
+          {complexity && (
+            <p className="text-xs mt-1">
+              <strong>Complexity:</strong> {complexity}
+            </p>
+          )}
         </div>
       ) : (
         <p className="text-sm">Run your code to see the output here.</p>
@@ -180,6 +196,8 @@ const CodingEnvi = () => {
   const [activeEditors, setActiveEditors] = useState(new Set());
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
+  const [fetchTime, setFetchTime] = useState(null); // Added for OutputPanel
+  const [complexity, setComplexity] = useState(null); // Added for OutputPanel
 
   const pinnedVideoRef = useRef(null);
   const editorRef = useRef(null);
@@ -231,8 +249,7 @@ const CodingEnvi = () => {
     return () => unsubscribe();
   }, [sessionId]);
 
-  // Firebase Chat Listener
-  // Firebase Chat Listener
+  // Firebase Chat Listener with Fixed Auto-Scroll
   useEffect(() => {
     if (!auth.currentUser) return;
 
@@ -246,15 +263,12 @@ const CodingEnvi = () => {
       }));
       setChatMessages(messages);
 
-      // Use setTimeout to ensure DOM is updated before scrolling
+      // Ensure DOM updates before scrolling
       setTimeout(() => {
         if (chatScrollRef.current) {
-          chatScrollRef.current.scrollTo({
-            top: chatScrollRef.current.scrollHeight,
-            behavior: "smooth", // Smooth scrolling for better UX
-          });
+          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
         }
-      }, 0); // Delay of 0ms ensures it runs after the render
+      }, 100); // 100ms delay
     });
 
     return () => unsubscribe();
@@ -327,7 +341,7 @@ const CodingEnvi = () => {
             return newSet;
           });
           editTimeouts.current.delete(editingClientId);
-        }, 250); // Remove after 250ms of inactivity
+        }, 250);
         editTimeouts.current.set(editingClientId, timeoutId);
       }
     });
@@ -365,7 +379,6 @@ const CodingEnvi = () => {
     setIsEditorReady(true);
   };
 
-  // Main Yjs Effect
   useEffect(() => {
     if (isEditorReady && editorRef.current && monacoRef.current) {
       initializeYjs(selectedLanguage);
@@ -414,20 +427,27 @@ const CodingEnvi = () => {
       setIsLoading(true);
       setError(null);
       setCodeOutput(null);
+      setFetchTime(null); // Reset fetchTime
+      setComplexity(null); // Reset complexity
 
       if (!editorRef.current || !editorRef.current.getValue().trim()) {
         throw new Error("No code to execute!");
       }
 
+      const startTime = performance.now();
       const result = await executeCode(
         editorRef.current.getValue(),
         selectedLanguage,
         stdin
       );
+      const endTime = performance.now();
+
       result.isError =
         result.status !== "Accepted" &&
         (!result.exitCode || result.exitCode !== 0);
       setCodeOutput(result);
+      setFetchTime((endTime - startTime).toFixed(2)); // Calculate fetch time in ms
+      setComplexity("O(n)"); // Placeholder complexity; replace with actual logic if available
     } catch (err) {
       setError(err);
     } finally {
@@ -719,7 +739,7 @@ const CodingEnvi = () => {
               {participants.map((participant) => {
                 const state = Array.from(
                   providerRef.current?.awareness.getStates() || []
-                ).find(([_, s]) => s.user?.id === participant.uid); // Match by uid
+                ).find(([_, s]) => s.user?.id === participant.uid);
                 const clientId = state ? state[0] : null;
                 const isActive = activeEditors.has(clientId);
                 const userColor = state ? state[1].user.color : "#888888";
@@ -1085,6 +1105,8 @@ const CodingEnvi = () => {
                         isLoading={isLoading}
                         error={error}
                         theme={theme}
+                        fetchTime={fetchTime}
+                        complexity={complexity}
                       />
                     </TabsContent>
                   </Tabs>
@@ -1200,7 +1222,7 @@ const CodingEnvi = () => {
                       <div
                         className={`max-w-[70%] p-2 rounded-lg ${
                           isCurrentUser
-                            ? "bg-blue-950 text-white"
+                            ? "bg-green-600 text-white"
                             : "bg-gray-200 text-black"
                         }`}
                       >
@@ -1211,11 +1233,17 @@ const CodingEnvi = () => {
                         )}
                         <p className="text-sm">{message.text}</p>
                         <span className="text-xs opacity-70">
-                          $
-                          <span className="text-xs opacity-70">
-  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-</span>
-
+                          {(() => {
+                            const date = new Date(message.timestamp);
+                            let hours = date.getHours();
+                            const minutes = date.getMinutes();
+                            const ampm = hours >= 12 ? "PM" : "AM";
+                            hours = hours % 12 || 12; // Convert 0 to 12
+                            const paddedMinutes = minutes
+                              .toString()
+                              .padStart(2, "0");
+                            return `${hours}:${paddedMinutes} ${ampm}`;
+                          })()}
                         </span>
                       </div>
                       {isCurrentUser && (
