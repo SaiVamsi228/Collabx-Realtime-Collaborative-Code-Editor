@@ -55,7 +55,7 @@ import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { MonacoBinding } from "y-monaco";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { auth, db } from "../firebase"; // Assuming firebase.js is in the same directory structure
+import { auth, db } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 
 const OutputPanel = ({ result, isLoading, error, theme }) => {
@@ -193,17 +193,22 @@ const CodingEnvi = () => {
     return () => unsubscribe();
   }, [sessionId]);
 
-  // Yjs Initialization and Cleanup
+  // WebSocket and Yjs Initialization (from old code)
   const initializeYjs = (language) => {
-    if (!editorRef.current || !monacoRef.current) return;
+    if (!editorRef.current || !monacoRef.current) {
+      console.log("Cannot initialize Yjs: missing editor or Monaco instance");
+      return;
+    }
 
-    const fullSessionId = `${sessionId}-${language}`;
-    const encodedSessionId = encodeURIComponent(fullSessionId);
-    const wsUrl = `wss://web-socket-server-production-55f1.up.railway.app/?sessionId=${encodedSessionId}`;
-
+    console.log("Initializing Yjs for language:", language);
     if (bindingRef.current) bindingRef.current.destroy();
     if (providerRef.current) providerRef.current.destroy();
     if (yDocRef.current) yDocRef.current.destroy();
+
+    const fullSessionId = `${sessionId}-${language}`;
+    const encodedSessionId = encodeURIComponent(fullSessionId);
+    const wsUrl = `wss.//web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
+    console.log(`Connecting to WebSocket: ${wsUrl}`);
 
     const yDoc = new Y.Doc();
     yDocRef.current = yDoc;
@@ -239,6 +244,7 @@ const CodingEnvi = () => {
           )?.[0];
 
       if (editingClientId) {
+        console.log("Edit from client:", editingClientId);
         setActiveEditors((prev) => new Set(prev).add(editingClientId));
         if (editTimeouts.current.has(editingClientId)) {
           clearTimeout(editTimeouts.current.get(editingClientId));
@@ -259,11 +265,11 @@ const CodingEnvi = () => {
     const awareness = providerRef.current.awareness;
     const localColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
     const localName =
-      auth.currentUser?.displayName ||
-      "User" + Math.floor(Math.random() * 1000);
+      auth.currentUser?.displayName || "User" + Math.floor(Math.random() * 1000);
     awareness.setLocalStateField("user", {
       name: localName,
       color: localColor,
+      id: auth.currentUser?.uid, // Consistent ID usage
     });
 
     const updateCursorPosition = (position) => {
@@ -277,6 +283,8 @@ const CodingEnvi = () => {
     editor.onDidChangeCursorSelection((e) =>
       updateCursorPosition(e.selection.getPosition())
     );
+
+    console.log(`Initialized Yjs for session: ${fullSessionId}`);
   };
 
   const handleEditorDidMount = (editor, monaco) => {
@@ -302,6 +310,7 @@ const CodingEnvi = () => {
           editorRef.current.getModel(),
           newLanguage
         );
+        initializeYjs(newLanguage); // Re-initialize Yjs for new language
         if (translatedCode === "" && editorRef.current) {
           editorRef.current.setValue("");
         }
@@ -472,6 +481,7 @@ const CodingEnvi = () => {
           </Button>
           <div className="w-[215px] h-[50px] flex items-center justify-center bg-transparent">
             {/* Placeholder for SVG */}
+            <div className="svg-placeholder">Logo SVG Placeholder</div>
           </div>
         </div>
 
@@ -733,106 +743,70 @@ const CodingEnvi = () => {
                 Participants
               </h2>
             </div>
-            <div className="h-full flex flex-col">
-              <div className="p-4 border-b">
-                <h2
-                  className={`font-semibold ${!leftSidebarOpen && "sr-only"}`}
-                >
-                  Participants
-                </h2>
-              </div>
-              <div className="flex-1 overflow-auto p-2">
-                {participants.map((participant) => {
-                  console.log(providerRef.current?.awareness.getStates());
-                  // Use participant.id instead of username for state lookup
-                  const state = Array.from(
-                    providerRef.current?.awareness.getStates() || []
-                  ).find(([_, s]) => s.user?.id === participant.id);
-
-                  const clientId = state ? state[0] : null;
-
-                  // Manage active editors
-                  const isActive = activeEditors.has(clientId);
-                  if (clientId && !isActive) {
-                    activeEditors.add(clientId);
-                  }
-
-                  const userColor = state ? state[1].user.color : "#888888";
-                  const displayName = participant.username || "Anonymous";
-
-                  return (
-                    <div
-                      key={participant.id}
-                      className={`flex items-center gap-2 p-2 rounded-md hover:bg-muted ${
-                        !leftSidebarOpen && "justify-center"
-                      } ${isActive ? "bg-muted/50" : ""}`} // Add subtle background when active
-                      style={{
-                        borderLeft: isActive
-                          ? `3px solid ${userColor}`
-                          : "none",
-                        transition: "all 0.3s ease",
-                      }}
-                    >
-                      <div className="relative">
-                        <Avatar
-                          className={`${isActive ? "border-2" : "border"}`}
-                          style={{
-                            borderColor: isActive ? userColor : "transparent",
-                            boxShadow: isActive
-                              ? `0 0 6px ${userColor}66`
-                              : "none",
-                          }}
-                        >
-                          <AvatarImage
-                            src={participant.avatar}
-                            alt={displayName}
-                          />
-                          <AvatarFallback>
-                            {displayName
-                              .split(" ")
-                              .map((word) => word.charAt(0))
-                              .slice(0, 2)
-                              .join("")
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        {leftSidebarOpen && (
-                          <div className="absolute -bottom-1 -right-1 flex gap-1">
-                            {participant.micOn && (
-                              <Badge
-                                variant="secondary"
-                                className="h-5 w-5 p-0 flex items-center justify-center"
-                              >
-                                <Mic className="h-3 w-3" />
-                              </Badge>
-                            )}
-                            {participant.videoOn && (
-                              <Badge
-                                variant="secondary"
-                                className="h-5 w-5 p-0 flex items-center justify-center"
-                              >
-                                <Video className="h-3 w-3" />
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </div>
+            <div className="flex-1 overflow-auto p-2">
+              {participants.map((participant) => {
+                console.log(providerRef.current?.awareness.getStates());
+                const state = Array.from(
+                  providerRef.current?.awareness.getStates() || []
+                ).find(([_, s]) => s.user?.id === participant.id);
+                const clientId = state ? state[0] : null;
+                const isActive = activeEditors.has(clientId);
+                if (clientId && !isActive) {
+                  activeEditors.add(clientId);
+                }
+                const userColor = state ? state[1].user.color : "#888888";
+                const displayName = participant.username || "Anonymous";
+                return (
+                  <div
+                    key={participant.id}
+                    className={`flex items-center gap-2 p-2 rounded-md hover:bg-muted ${
+                      !leftSidebarOpen && "justify-center"
+                    } ${isActive ? "bg-muted/50" : ""}`}
+                  >
+                    <div className="relative">
+                      <Avatar
+                        className={isActive ? "border-2 border-green-500" : ""}
+                      >
+                        <AvatarImage
+                          src={participant.avatar}
+                          alt={displayName}
+                        />
+                        <AvatarFallback>
+                          {displayName
+                            .split(" ")
+                            .map((word) => word.charAt(0))
+                            .slice(0, 2)
+                            .join("")
+                            .toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
                       {leftSidebarOpen && (
-                        <span
-                          className="text-sm"
-                          style={{
-                            color: isActive ? userColor : "inherit",
-                            fontWeight: isActive ? "500" : "normal",
-                          }}
-                        >
-                          {displayName}
-                          {isActive && " (Active)"}
-                        </span>
+                        <div className="absolute -bottom-1 -right-1 flex gap-1">
+                          {participant.micOn && (
+                            <Badge
+                              variant="secondary"
+                              className="h-5 w-5 p-0 flex items-center justify-center"
+                            >
+                              <Mic className="h-3 w-3" />
+                            </Badge>
+                          )}
+                          {participant.videoOn && (
+                            <Badge
+                              variant="secondary"
+                              className="h-5 w-5 p-0 flex items-center justify-center"
+                            >
+                              <Video className="h-3 w-3" />
+                            </Badge>
+                          )}
+                        </div>
                       )}
                     </div>
-                  );
-                })}
-              </div>
+                    {leftSidebarOpen && (
+                      <span className="text-sm">{displayName}</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
