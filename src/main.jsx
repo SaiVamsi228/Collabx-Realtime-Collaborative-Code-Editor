@@ -1,11 +1,10 @@
-// index.jsx
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Home from "@/components/Home";
 import AuthPage from "@/components/AuthPage";
 import SessionManager from "@/components/SessionManager";
-import CodingEnvi from "@/components/CodingEnvi"; // Import the new component
+import CodingEnvi from "@/components/CodingEnvi";
 import { auth } from "@/firebase.js";
 import { useAuthState } from "react-firebase-hooks/auth";
 import "./styles/globals.css";
@@ -73,6 +72,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         />
         <Route
           path="/coding-environment"
+          element={
+            <ProtectedRoute>
+              <CodingEnvi />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/session/:sessionId"
           element={
             <ProtectedRoute>
               <CodingEnvi />

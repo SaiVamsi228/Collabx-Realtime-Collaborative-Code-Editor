@@ -3,7 +3,7 @@ import {
   getAuth,
   GoogleAuthProvider,
   GithubAuthProvider,
-  signInWithPopup, // Added this
+  signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -11,6 +11,7 @@ import {
   setPersistence,
 } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
+import { getFirestore } from "firebase/firestore"; // Add Firestore
 
 const firebaseConfig = {
   apiKey: "AIzaSyDpdS8FgbNqWmTtlRLBw7onOVdK2rW7bgE",
@@ -24,6 +25,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app); // Initialize Firestore
 const analytics = getAnalytics(app);
 
 const googleProvider = new GoogleAuthProvider();
@@ -37,9 +39,10 @@ setPersistence(auth, browserLocalPersistence)
 
 export {
   auth,
+  db, // Export Firestore instance
   googleProvider,
   githubProvider,
-  signInWithPopup, // Added this
+  signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,

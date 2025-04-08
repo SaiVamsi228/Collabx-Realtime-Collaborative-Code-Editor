@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import {
-  Code,
+  Users,
   Play,
-  Share2,
+  Share,
   Settings,
   GitBranch,
   Clock,
@@ -49,103 +49,82 @@ import { Input } from "./ui/input";
 import { ScrollArea } from "./ui/scroll-area";
 import { ThemeProvider, useTheme } from "./theme-provider";
 import "../styles/CodingEnvi.css";
-import { executeCode } from "../api/judge0Service"; // Assuming this exists
+import { executeCode } from "../api/judge0Service";
+import Editor from "@monaco-editor/react";
+import * as Y from "yjs";
+import { WebsocketProvider } from "y-websocket";
+import { MonacoBinding } from "y-monaco";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { auth, db } from "../firebase"; // Assuming firebase.js is in the same directory structure
+import { doc, onSnapshot } from "firebase/firestore";
 
 const OutputPanel = ({ result, isLoading, error, theme }) => {
-  if (isLoading) {
-    return (
-      <div className={`p-4 ${theme === "dark" ? "text-white" : "text-black"}`}>
+  return (
+    <ScrollArea
+      className={`h-[200px] p-4 ${
+        theme === "dark" ? "text-white" : "text-black"
+      }`}
+    >
+      {isLoading ? (
         <div className="flex items-center gap-2">
           <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-green-500"></div>
-          <p>Compiling and running code...</p>
+          <p className="text-sm">Compiling and running code...</p>
         </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className={`p-4 ${theme === "dark" ? "text-white" : "text-black"}`}>
-        <h3 className="text-lg font-semibold text-red-500">Compilation Failed</h3>
-        <pre className="mt-2 text-sm">
-          {error.message || "Something went wrong while running your code."}
-        </pre>
-        <div className="mt-4">
-          <h4 className="text-sm font-medium">Quick things to look at:</h4>
-          <ul className="list-disc pl-5 text-sm mt-1">
-            <li>Did you forget a semicolon (;) at the end of a line?</li>
-            <li>Are all your brackets { } ( ) [ ] closed properly?</li>
-            <li>Did you spell variable or function names wrong?</li>
-            <li>Did you forget to define a variable before using it?</li>
-            <li>Are you missing quotes "" around text (strings)?</li>
-          </ul>
-        </div>
-      </div>
-    );
-  }
-
-  if (!result) {
-    return (
-      <div className={`p-4 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>
-        <p>Run your code to see output here</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`p-4 ${theme === "dark" ? "text-white" : "text-black"}`}>
-      <div className="mb-4">
-        <p className={`text-sm ${result.isError ? "text-red-500" : "text-green-500"}`}>
-          <strong>Status:</strong> {result.isError ? "Compilation Failed" : "Compiled Successfully"}
-        </p>
-        {result.executionTime && (
-          <p className="text-sm"><strong>Time:</strong> {result.executionTime}s</p>
-        )}
-        {result.memory && (
-          <p className="text-sm"><strong>Memory:</strong> {result.memory} KB</p>
-        )}
-      </div>
-
-      {result.isError ? (
+      ) : error ? (
         <div>
-          <h3 className="text-lg font-semibold">Error Details</h3>
-          <pre className="mt-2 text-sm bg-muted p-2 rounded">{result.output}</pre>
-          <div className="mt-4">
-            <h4 className="text-sm font-medium">Common mistakes to check:</h4>
-            <ul className="list-disc pl-5 text-sm mt-1">
-              <li>Missing semicolon (;) at the end of a line</li>
-              <li>Unclosed brackets: { }, ( ), or [ ]</li>
-              <li>Typo in a variable or function name</li>
-              <li>Using a variable before creating it</li>
-              <li>Forgetting quotes "" around text (strings)</li>
-            </ul>
-          </div>
+          <h3 className="text-sm font-semibold text-red-500">
+            Compilation Failed
+          </h3>
+          <pre className="mt-2 text-xs whitespace-pre-wrap">
+            {error.message || "Something went wrong."}
+          </pre>
+        </div>
+      ) : result ? (
+        <div>
+          <p
+            className={`text-sm ${
+              result.isError ? "text-red-500" : "text-green-500"
+            }`}
+          >
+            <strong>Status:</strong>{" "}
+            {result.isError ? "Compilation Failed" : "Compiled Successfully"}
+          </p>
+          <pre className="mt-2 text-xs whitespace-pre-wrap">
+            {result.output || "No output generated."}
+          </pre>
         </div>
       ) : (
-        <div>
-          <h3 className="text-lg font-semibold">Output</h3>
-          <pre className="mt-2 text-sm bg-muted p-2 rounded">{result.output}</pre>
-        </div>
+        <p className="text-sm">Run your code to see the output here.</p>
       )}
-    </div>
+    </ScrollArea>
   );
 };
 
 const CodingEnvi = () => {
+  const { sessionId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const initialLanguage = location.state?.targetLanguage || "javascript";
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
-  const [consoleExpanded, setConsoleExpanded] = useState(false);
+  const [notesHeight, setNotesHeight] = useState(200);
+  const [isResizing, setIsResizing] = useState(false);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [versionControlExpanded, setVersionControlExpanded] = useState(false);
   const [rightSidebarTab, setRightSidebarTab] = useState("video");
   const [micEnabled, setMicEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
-  const [selectedLanguage, setSelectedLanguage] = useState("javascript");
+  const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
+  const [previousLanguage, setPreviousLanguage] = useState(initialLanguage);
   const [code, setCode] = useState(
     "// Write your code here\nconsole.log('Hello, world!');\n"
   );
   const [pinnedVideo, setPinnedVideo] = useState(null);
-  const [pinnedVideoPosition, setPinnedVideoPosition] = useState({ x: 20, y: 20 });
+  const [pinnedVideoPosition, setPinnedVideoPosition] = useState({
+    x: 20,
+    y: 20,
+  });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [showRunWithInput, setShowRunWithInput] = useState(false);
@@ -154,70 +133,198 @@ const CodingEnvi = () => {
   const [codeOutput, setCodeOutput] = useState(null);
   const [error, setError] = useState(null);
   const { theme, setTheme } = useTheme();
+  const [fontSize, setFontSize] = useState(14);
+  const [tabSize, setTabSize] = useState(2);
+  const [monacoTheme, setMonacoTheme] = useState("vs-dark");
+  const [isEditorReady, setIsEditorReady] = useState(false);
+  const [activeCollapsible, setActiveCollapsible] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(undefined);
+  const [participants, setParticipants] = useState([]);
+  const [activeEditors, setActiveEditors] = useState(new Set());
 
   const pinnedVideoRef = useRef(null);
+  const editorRef = useRef(null);
+  const monacoRef = useRef(null);
+  const yDocRef = useRef(null);
+  const providerRef = useRef(null);
+  const bindingRef = useRef(null);
+  const fetchCardRef = useRef(null);
+  const complexityCardRef = useRef(null);
+  const editTimeouts = useRef(new Map());
 
-  const participants = [
-    {
-      id: 1,
-      name: "Jane Smith",
-      avatar: "/placeholder.svg?height=40&width=40",
-      micOn: true,
-      videoOn: true,
-      isActive: true,
-    },
-    {
-      id: 2,
-      name: "John Doe",
-      avatar: "/placeholder.svg?height=40&width=40",
-      micOn: false,
-      videoOn: true,
-      isActive: true,
-    },
-    {
-      id: 3,
-      name: "Alex Johnson",
-      avatar: "/placeholder.svg?height=40&width=40",
-      micOn: true,
-      videoOn: false,
-      isActive: false,
-    },
-    {
-      id: 4,
-      name: "Sam Wilson",
-      avatar: "/placeholder.svg?height=40&width=40",
-      micOn: false,
-      videoOn: false,
-      isActive: false,
-    },
+  const languages = [
+    "javascript",
+    "typescript",
+    "python",
+    "java",
+    "cpp",
+    "csharp",
+    "php",
+    "swift",
+    "kotlin",
+    "dart",
+    "go",
+    "ruby",
+    "scala",
+    "rust",
+    "erlang",
+    "elixir",
   ];
 
-  const messages = [
-    {
-      id: 1,
-      sender: "Jane Smith",
-      text: "Hey everyone, I'm working on the authentication module",
-      time: "10:30 AM",
-    },
-    {
-      id: 2,
-      sender: "John Doe",
-      text: "I'll handle the API integration",
-      time: "10:32 AM",
-    },
-    {
-      id: 3,
-      sender: "Alex Johnson",
-      text: "Let me know if you need help with the UI components",
-      time: "10:35 AM",
-    },
-    {
-      id: 4,
-      sender: "Sam Wilson",
-      text: "I found a bug in the login flow, check line 42",
-      time: "10:40 AM",
-    },
-  ];
+  // Authentication Check
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setIsAuthenticated(!!user);
+      if (!user) {
+        navigate("/");
+      }
+    });
+    return () => unsubscribe();
+  }, [navigate]);
+
+  // Firebase Participants Listener
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    const unsubscribe = onSnapshot(doc(db, "sessions", sessionId), (doc) => {
+      if (doc.exists()) {
+        setParticipants(doc.data().participants || []);
+      }
+    });
+    return () => unsubscribe();
+  }, [sessionId]);
+
+  // Yjs Initialization and Cleanup
+  const initializeYjs = (language) => {
+    if (!editorRef.current || !monacoRef.current) return;
+
+    const fullSessionId = `${sessionId}-${language}`;
+    const encodedSessionId = encodeURIComponent(fullSessionId);
+    const wsUrl = `wss://web-socket-server-production-55f1.up.railway.app/?sessionId=${encodedSessionId}`;
+
+    if (bindingRef.current) bindingRef.current.destroy();
+    if (providerRef.current) providerRef.current.destroy();
+    if (yDocRef.current) yDocRef.current.destroy();
+
+    const yDoc = new Y.Doc();
+    yDocRef.current = yDoc;
+
+    providerRef.current = new WebsocketProvider(wsUrl, fullSessionId, yDoc, {
+      resyncInterval: 2000,
+    });
+
+    providerRef.current.on("status", (event) => {
+      console.log(`WebSocket ${fullSessionId} status: ${event.status}`);
+    });
+
+    providerRef.current.on("connection-error", (err) => {
+      console.error(`WebSocket ${fullSessionId} error:`, err);
+    });
+
+    const yText = yDoc.getText("monaco");
+    bindingRef.current = new MonacoBinding(
+      yText,
+      editorRef.current.getModel(),
+      new Set([editorRef.current]),
+      providerRef.current.awareness
+    );
+
+    yText.observe((event) => {
+      const transaction = event.transaction;
+      let editingClientId = transaction.local
+        ? providerRef.current.awareness.clientID
+        : Array.from(transaction.afterState).find(
+            ([clientId, clock]) =>
+              !transaction.beforeState.has(clientId) ||
+              transaction.beforeState.get(clientId) < clock
+          )?.[0];
+
+      if (editingClientId) {
+        setActiveEditors((prev) => new Set(prev).add(editingClientId));
+        if (editTimeouts.current.has(editingClientId)) {
+          clearTimeout(editTimeouts.current.get(editingClientId));
+        }
+        const timeoutId = setTimeout(() => {
+          setActiveEditors((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(editingClientId);
+            return newSet;
+          });
+          editTimeouts.current.delete(editingClientId);
+        }, 250);
+        editTimeouts.current.set(editingClientId, timeoutId);
+      }
+    });
+
+    const editor = editorRef.current;
+    const awareness = providerRef.current.awareness;
+    const localColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
+    const localName =
+      auth.currentUser?.displayName ||
+      "User" + Math.floor(Math.random() * 1000);
+    awareness.setLocalStateField("user", {
+      name: localName,
+      color: localColor,
+    });
+
+    const updateCursorPosition = (position) => {
+      awareness.setLocalStateField("cursor", {
+        line: position.lineNumber,
+        column: position.column,
+      });
+    };
+
+    editor.onDidChangeCursorPosition((e) => updateCursorPosition(e.position));
+    editor.onDidChangeCursorSelection((e) =>
+      updateCursorPosition(e.selection.getPosition())
+    );
+  };
+
+  const handleEditorDidMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+    setIsEditorReady(true);
+    initializeYjs(selectedLanguage);
+  };
+
+  useEffect(() => {
+    setMonacoTheme(theme === "dark" ? "vs-dark" : "light");
+  }, [theme]);
+
+  useEffect(() => {
+    if (isEditorReady) {
+      const translatedCode = location.state?.translatedCode;
+      const newLanguage = location.state?.targetLanguage;
+
+      if (newLanguage && newLanguage !== selectedLanguage) {
+        setPreviousLanguage(selectedLanguage);
+        setSelectedLanguage(newLanguage);
+        monacoRef.current.editor.setModelLanguage(
+          editorRef.current.getModel(),
+          newLanguage
+        );
+        if (translatedCode === "" && editorRef.current) {
+          editorRef.current.setValue("");
+        }
+      }
+
+      if (
+        translatedCode !== undefined &&
+        translatedCode !== "" &&
+        editorRef.current &&
+        editorRef.current.getValue() !== translatedCode
+      ) {
+        editorRef.current.setValue(translatedCode);
+        editorRef.current.getAction("editor.action.formatDocument").run();
+      }
+    }
+
+    return () => {
+      if (bindingRef.current) bindingRef.current.destroy();
+      if (providerRef.current) providerRef.current.destroy();
+      if (yDocRef.current) yDocRef.current.destroy();
+      editTimeouts.current.clear();
+    };
+  }, [isEditorReady, selectedLanguage, sessionId, location.state]);
 
   const handleRunCode = async (stdin = "") => {
     try {
@@ -225,13 +332,18 @@ const CodingEnvi = () => {
       setError(null);
       setCodeOutput(null);
 
-      if (!code.trim()) {
+      if (!editorRef.current || !editorRef.current.getValue().trim()) {
         throw new Error("No code to execute!");
       }
 
-      const result = await executeCode(code, selectedLanguage, stdin);
-      result.isError = result.status !== "Accepted" && 
-                      (!result.exitCode || result.exitCode !== 0);
+      const result = await executeCode(
+        editorRef.current.getValue(),
+        selectedLanguage,
+        stdin
+      );
+      result.isError =
+        result.status !== "Accepted" &&
+        (!result.exitCode || result.exitCode !== 0);
       setCodeOutput(result);
     } catch (err) {
       setError(err);
@@ -267,11 +379,35 @@ const CodingEnvi = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
-  useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      setIsDragging(false);
-    };
+  const handleResizeStart = (e) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
 
+  const handleResizeMove = (e) => {
+    if (isResizing) {
+      const newHeight = window.innerHeight - e.clientY;
+      setNotesHeight(
+        Math.max(100, Math.min(newHeight, window.innerHeight - 200))
+      );
+    }
+  };
+
+  const handleResizeEnd = () => {
+    setIsResizing(false);
+  };
+
+  useEffect(() => {
+    window.addEventListener("mousemove", handleResizeMove);
+    window.addEventListener("mouseup", handleResizeEnd);
+    return () => {
+      window.removeEventListener("mousemove", handleResizeMove);
+      window.removeEventListener("mouseup", handleResizeEnd);
+    };
+  }, [isResizing]);
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => setIsDragging(false);
     const handleGlobalMouseMove = (e) => {
       if (isDragging && pinnedVideoRef.current) {
         const newX = e.clientX - dragOffset.x;
@@ -279,19 +415,43 @@ const CodingEnvi = () => {
         setPinnedVideoPosition({ x: newX, y: newY });
       }
     };
+    const handleGlobalClick = (e) => {
+      if (
+        activeCollapsible &&
+        fetchCardRef.current &&
+        complexityCardRef.current &&
+        !fetchCardRef.current.contains(e.target) &&
+        !complexityCardRef.current.contains(e.target) &&
+        !e.target.closest("button")
+      ) {
+        setActiveCollapsible(null);
+      }
+    };
 
     window.addEventListener("mouseup", handleGlobalMouseUp);
     window.addEventListener("mousemove", handleGlobalMouseMove);
+    window.addEventListener("click", handleGlobalClick);
 
     return () => {
       window.removeEventListener("mouseup", handleGlobalMouseUp);
       window.removeEventListener("mousemove", handleGlobalMouseMove);
+      window.removeEventListener("click", handleGlobalClick);
     };
-  }, [isDragging, dragOffset]);
+  }, [isDragging, dragOffset, activeCollapsible]);
+
+  const toggleCollapsible = (type) => {
+    setActiveCollapsible(activeCollapsible === type ? null : type);
+  };
+
+  if (isAuthenticated === undefined) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div
-      className={`flex flex-col h-screen coding-envi ${theme === "dark" ? "dark" : ""}`}
+      className={`flex flex-col h-screen coding-envi ${
+        theme === "dark" ? "dark" : ""
+      }`}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
@@ -302,15 +462,16 @@ const CodingEnvi = () => {
             variant="ghost"
             size="icon"
             className={`rounded-xl bg-transparent text-black ${
-              theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+              theme === "light"
+                ? "hover:bg-gray-100 text-black"
+                : "hover:bg-gray-800 text-white"
             }`}
             onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
           >
-            <Code className="h-5 w-5" />
+            <Users className={`w-5 h-5 bg-transparent`} />
           </Button>
-          {/* Placeholder for Logo SVG */}
-          <div className="w-[215px] h-[50px] bg-gray-200 flex items-center justify-center">
-            <span className="text-sm text-gray-500">[Logo SVG Placeholder]</span>
+          <div className="w-[215px] h-[50px] flex items-center justify-center bg-transparent">
+            {/* Placeholder for SVG */}
           </div>
         </div>
 
@@ -319,12 +480,22 @@ const CodingEnvi = () => {
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Select Language" />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="javascript">JavaScript</SelectItem>
-              <SelectItem value="typescript">TypeScript</SelectItem>
-              <SelectItem value="python">Python</SelectItem>
-              <SelectItem value="java">Java</SelectItem>
-              <SelectItem value="csharp">C#</SelectItem>
+            <SelectContent
+              className={theme === "dark" ? "bg-gray-800" : "bg-white"}
+            >
+              {languages.map((lang) => (
+                <SelectItem
+                  key={lang}
+                  value={lang}
+                  className={`cursor-pointer text-white ${
+                    theme === "dark"
+                      ? "hover:bg-gray-600"
+                      : "hover:bg-gray-200 text-black"
+                  }`}
+                >
+                  {lang.charAt(0).toUpperCase() + lang.slice(1)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -351,7 +522,9 @@ const CodingEnvi = () => {
                 <Button
                   variant="outline"
                   className={`rounded-lg bg-transparent ${
-                    theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+                    theme === "light"
+                      ? "hover:bg-gray-100 text-black"
+                      : "hover:bg-gray-800 text-white"
                   } border border-gray-20`}
                   onClick={() => setShowRunWithInput(!showRunWithInput)}
                 >
@@ -363,13 +536,96 @@ const CodingEnvi = () => {
             </Tooltip>
           </TooltipProvider>
 
+          <div className="relative">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`rounded-lg bg-transparent ${
+                      theme === "light"
+                        ? "hover:bg-gray-100 text-black"
+                        : "hover:bg-gray-800 text-white"
+                    } border border-gray-11`}
+                    onClick={() => toggleCollapsible("translate")}
+                  >
+                    <Languages className="h-4 w-4 mr-2" />
+                    Translate
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Translate code</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <Collapsible open={activeCollapsible === "translate"}>
+              <CollapsibleContent className="absolute top-10 left-0 z-10">
+                <Card
+                  className={`${
+                    theme === "dark"
+                      ? "bg-gray-800 text-white"
+                      : "bg-white text-black"
+                  } border`}
+                >
+                  <CardHeader className="py-2">
+                    <CardTitle className="text-sm">Code Translation</CardTitle>
+                  </CardHeader>
+                  <CardContent className="py-2">
+                    <Select defaultValue="python">
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Translate To" />
+                      </SelectTrigger>
+                      <SelectContent
+                        className={
+                          theme === "dark" ? "bg-gray-800" : "bg-white"
+                        }
+                      >
+                        <SelectItem
+                          value="python"
+                          className={`cursor-pointer text-white ${
+                            theme === "dark"
+                              ? "hover:bg-gray-600"
+                              : "hover:bg-gray-200 text-black"
+                          }`}
+                        >
+                          Python
+                        </SelectItem>
+                        <SelectItem
+                          value="java"
+                          className={`cursor-pointer text-white ${
+                            theme === "dark"
+                              ? "hover:bg-gray-600"
+                              : "hover:bg-gray-200 text-black"
+                          }`}
+                        >
+                          Java
+                        </SelectItem>
+                        <SelectItem
+                          value="csharp"
+                          className={`cursor-pointer text-white ${
+                            theme === "dark"
+                              ? "hover:bg-gray-600"
+                              : "hover:bg-gray-200 text-black"
+                          }`}
+                        >
+                          C#
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </CardContent>
+                </Card>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
                   className={`rounded-lg bg-transparent ${
-                    theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+                    theme === "light"
+                      ? "hover:bg-gray-100 text-black"
+                      : "hover:bg-gray-800 text-white"
                   } border border-gray-11`}
                   onClick={toggleTheme}
                 >
@@ -392,11 +648,52 @@ const CodingEnvi = () => {
                 <Button
                   variant="outline"
                   className={`rounded-lg bg-transparent ${
-                    theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+                    theme === "light"
+                      ? "hover:bg-gray-100 text-black"
+                      : "hover:bg-gray-800 text-white"
+                  } border border-gray-11`}
+                  onClick={() =>
+                    setVersionControlExpanded(!versionControlExpanded)
+                  }
+                >
+                  <GitBranch className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>View version control</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={`rounded-lg bg-transparent ${
+                    theme === "light"
+                      ? "hover:bg-gray-100 text-black"
+                      : "hover:bg-gray-800 text-white"
+                  } border border-gray-11`}
+                  onClick={() => setSettingsExpanded(!settingsExpanded)}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Adjust settings</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={`rounded-lg bg-transparent ${
+                    theme === "light"
+                      ? "hover:bg-gray-100 text-black"
+                      : "hover:bg-gray-800 text-white"
                   } border border-gray-11`}
                 >
-                  <Share2 className="h-4 w-4 mr-2" />
-                  Share
+                  <Share className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Share this session</TooltipContent>
@@ -406,7 +703,9 @@ const CodingEnvi = () => {
           <Button
             variant="ghost"
             className={`rounded-lg bg-transparent ${
-              theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+              theme === "light"
+                ? "hover:bg-gray-100 text-black"
+                : "hover:bg-gray-800 text-white"
             }`}
             size="icon"
             onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
@@ -423,92 +722,180 @@ const CodingEnvi = () => {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar */}
-        <div className={`border-r transition-all duration-300 ${leftSidebarOpen ? "w-64" : "w-16"}`}>
+        <div
+          className={`border-r transition-all duration-300 ${
+            leftSidebarOpen ? "w-64" : "w-16"
+          }`}
+        >
           <div className="h-full flex flex-col">
             <div className="p-4 border-b">
               <h2 className={`font-semibold ${!leftSidebarOpen && "sr-only"}`}>
                 Participants
               </h2>
             </div>
-            <div className="flex-1 overflow-auto p-2">
-              {participants.map((participant) => (
-                <div
-                  key={participant.id}
-                  className={`flex items-center gap-2 p-2 rounded-md hover:bg-muted ${
-                    !leftSidebarOpen && "justify-center"
-                  }`}
+            <div className="h-full flex flex-col">
+              <div className="p-4 border-b">
+                <h2
+                  className={`font-semibold ${!leftSidebarOpen && "sr-only"}`}
                 >
-                  <div className="relative">
-                    <Avatar
-                      className={participant.isActive ? "border-2 border-green-500" : ""}
+                  Participants
+                </h2>
+              </div>
+              <div className="flex-1 overflow-auto p-2">
+                {participants.map((participant) => {
+                  console.log(providerRef.current?.awareness.getStates());
+                  // Use participant.id instead of username for state lookup
+                  const state = Array.from(
+                    providerRef.current?.awareness.getStates() || []
+                  ).find(([_, s]) => s.user?.id === participant.id);
+
+                  const clientId = state ? state[0] : null;
+
+                  // Manage active editors
+                  const isActive = activeEditors.has(clientId);
+                  if (clientId && !isActive) {
+                    activeEditors.add(clientId);
+                  }
+
+                  const userColor = state ? state[1].user.color : "#888888";
+                  const displayName = participant.username || "Anonymous";
+
+                  return (
+                    <div
+                      key={participant.id}
+                      className={`flex items-center gap-2 p-2 rounded-md hover:bg-muted ${
+                        !leftSidebarOpen && "justify-center"
+                      } ${isActive ? "bg-muted/50" : ""}`} // Add subtle background when active
+                      style={{
+                        borderLeft: isActive
+                          ? `3px solid ${userColor}`
+                          : "none",
+                        transition: "all 0.3s ease",
+                      }}
                     >
-                      <AvatarImage src={participant.avatar} alt={participant.name} />
-                      <AvatarFallback>{participant.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    {leftSidebarOpen && (
-                      <div className="absolute -bottom-1 -right-1 flex gap-1">
-                        {participant.micOn && (
-                          <Badge
-                            variant="secondary"
-                            className="h-5 w-5 p-0 flex items-center justify-center"
-                          >
-                            <Mic className="h-3 w-3" />
-                          </Badge>
-                        )}
-                        {participant.videoOn && (
-                          <Badge
-                            variant="secondary"
-                            className="h-5 w-5 p-0 flex items-center justify-center"
-                          >
-                            <Video className="h-3 w-3" />
-                          </Badge>
+                      <div className="relative">
+                        <Avatar
+                          className={`${isActive ? "border-2" : "border"}`}
+                          style={{
+                            borderColor: isActive ? userColor : "transparent",
+                            boxShadow: isActive
+                              ? `0 0 6px ${userColor}66`
+                              : "none",
+                          }}
+                        >
+                          <AvatarImage
+                            src={participant.avatar}
+                            alt={displayName}
+                          />
+                          <AvatarFallback>
+                            {displayName
+                              .split(" ")
+                              .map((word) => word.charAt(0))
+                              .slice(0, 2)
+                              .join("")
+                              .toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        {leftSidebarOpen && (
+                          <div className="absolute -bottom-1 -right-1 flex gap-1">
+                            {participant.micOn && (
+                              <Badge
+                                variant="secondary"
+                                className="h-5 w-5 p-0 flex items-center justify-center"
+                              >
+                                <Mic className="h-3 w-3" />
+                              </Badge>
+                            )}
+                            {participant.videoOn && (
+                              <Badge
+                                variant="secondary"
+                                className="h-5 w-5 p-0 flex items-center justify-center"
+                              >
+                                <Video className="h-3 w-3" />
+                              </Badge>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                  {leftSidebarOpen && (
-                    <span className="text-sm">{participant.name}</span>
-                  )}
-                </div>
-              ))}
+                      {leftSidebarOpen && (
+                        <span
+                          className="text-sm"
+                          style={{
+                            color: isActive ? userColor : "inherit",
+                            fontWeight: isActive ? "500" : "normal",
+                          }}
+                        >
+                          {displayName}
+                          {isActive && " (Active)"}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Main Editor Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Code Editor */}
           {!settingsExpanded && !versionControlExpanded && (
             <div
-              className={`flex-1 overflow-auto transition-all duration-300 ${
-                consoleExpanded ? "h-1/2" : showRunWithInput ? "h-[calc(100%-300px)]" : "h-[calc(100%-200px)]"
-              }`}
+              className="flex-1 overflow-auto"
+              style={{
+                height: `calc(100% - ${
+                  notesHeight + (showRunWithInput ? 100 : 0)
+                }px)`,
+              }}
             >
-              <Textarea
-                className="w-full h-full font-mono p-4 resize-none border-0 rounded-none focus-visible:ring-0"
+              <Editor
+                height="100%"
+                language={selectedLanguage}
+                theme={monacoTheme}
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onMount={handleEditorDidMount}
+                options={{
+                  minimap: { enabled: true },
+                  fontSize: fontSize,
+                  tabSize: tabSize,
+                  wordWrap: "on",
+                  automaticLayout: true,
+                  smoothScrolling: true,
+                  cursorBlinking: "smooth",
+                  cursorSmoothCaretAnimation: true,
+                  mouseWheelZoom: true,
+                  bracketPairColorization: { enabled: true },
+                  acceptSuggestionOnEnter: "on",
+                  lineNumbers: "on",
+                  renderWhitespace: "all",
+                  detectIndentation: false,
+                }}
               />
             </div>
           )}
 
-          {/* Run with Input */}
           {showRunWithInput && !settingsExpanded && !versionControlExpanded && (
-            <div className="border-t h-[100px] p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium">Input</h3>
-                <Button variant="ghost" size="sm" onClick={() => setShowRunWithInput(false)}>
-                  <X className="h-4 w-4" />
-                </Button>
+            <div className="border-t h-[100px] p-4 flex items-center gap-2">
+              <div className="flex-1">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium">Input</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowRunWithInput(false)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <Textarea
+                  className="w-full h-[60px] font-mono resize-none"
+                  placeholder="Enter input for your code..."
+                  value={codeInput}
+                  onChange={(e) => setCodeInput(e.target.value)}
+                />
               </div>
-              <Textarea
-                className="w-full h-[60px] font-mono resize-none"
-                placeholder="Enter input for your code..."
-                value={codeInput}
-                onChange={(e) => setCodeInput(e.target.value)}
-              />
               <Button
-                className="mt-2 bg-green-700 hover:bg-green-600 text-white"
+                className="bg-green-700 hover:bg-green-600 text-white h-10"
                 onClick={() => handleRunCode(codeInput)}
                 disabled={isLoading}
               >
@@ -517,7 +904,6 @@ const CodingEnvi = () => {
             </div>
           )}
 
-          {/* Settings Panel */}
           {settingsExpanded && (
             <div className="flex-1 p-4 overflow-auto">
               <div className="flex items-center justify-between mb-4">
@@ -525,7 +911,9 @@ const CodingEnvi = () => {
                 <Button
                   variant="ghost"
                   className={`rounded-xl bg-transparent border border-gray-600 ${
-                    theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+                    theme === "light"
+                      ? "hover:bg-gray-100 text-black"
+                      : "hover:bg-gray-800 text-white"
                   }`}
                   size="sm"
                   onClick={() => setSettingsExpanded(false)}
@@ -544,39 +932,146 @@ const CodingEnvi = () => {
                         <SelectTrigger>
                           <SelectValue placeholder="Select theme" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="light">Light</SelectItem>
-                          <SelectItem value="dark">Dark</SelectItem>
-                          <SelectItem value="system">System</SelectItem>
+                        <SelectContent
+                          className={
+                            theme === "dark" ? "bg-gray-800" : "bg-white"
+                          }
+                        >
+                          <SelectItem
+                            value="light"
+                            className={`cursor-pointer text-white ${
+                              theme === "dark"
+                                ? "hover:bg-gray-600"
+                                : "hover:bg-gray-200 text-black"
+                            }`}
+                          >
+                            Light
+                          </SelectItem>
+                          <SelectItem
+                            value="dark"
+                            className={`cursor-pointer text-white ${
+                              theme === "dark"
+                                ? "hover:bg-gray-600"
+                                : "hover:bg-gray-200 text-black"
+                            }`}
+                          >
+                            Dark
+                          </SelectItem>
+                          <SelectItem
+                            value="system"
+                            className={`cursor-pointer text-white ${
+                              theme === "dark"
+                                ? "hover:bg-gray-600"
+                                : "hover:bg-gray-200 text-black"
+                            }`}
+                          >
+                            System
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div>
                       <label className="text-sm font-medium">Font Size</label>
-                      <Select defaultValue="14">
+                      <Select
+                        value={fontSize.toString()}
+                        onValueChange={(value) => setFontSize(parseInt(value))}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select font size" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="12">12px</SelectItem>
-                          <SelectItem value="14">14px</SelectItem>
-                          <SelectItem value="16">16px</SelectItem>
-                          <SelectItem value="18">18px</SelectItem>
+                        <SelectContent
+                          className={
+                            theme === "dark" ? "bg-gray-800" : "bg-white"
+                          }
+                        >
+                          <SelectItem
+                            value="12"
+                            className={`cursor-pointer text-white ${
+                              theme === "dark"
+                                ? "hover:bg-gray-600"
+                                : "hover:bg-gray-200 text-black"
+                            }`}
+                          >
+                            12px
+                          </SelectItem>
+                          <SelectItem
+                            value="14"
+                            className={`cursor-pointer text-white ${
+                              theme === "dark"
+                                ? "hover:bg-gray-600"
+                                : "hover:bg-gray-200 text-black"
+                            }`}
+                          >
+                            14px
+                          </SelectItem>
+                          <SelectItem
+                            value="16"
+                            className={`cursor-pointer text-white ${
+                              theme === "dark"
+                                ? "hover:bg-gray-600"
+                                : "hover:bg-gray-200 text-black"
+                            }`}
+                          >
+                            16px
+                          </SelectItem>
+                          <SelectItem
+                            value="18"
+                            className={`cursor-pointer text-white ${
+                              theme === "dark"
+                                ? "hover:bg-gray-600"
+                                : "hover:bg-gray-200 text-black"
+                            }`}
+                          >
+                            18px
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div>
                       <label className="text-sm font-medium">Tab Size</label>
-                      <Select defaultValue="2">
+                      <Select
+                        value={tabSize.toString()}
+                        onValueChange={(value) => setTabSize(parseInt(value))}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder="Select tab size" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="2">2 spaces</SelectItem>
-                          <SelectItem value="4">4 spaces</SelectItem>
-                          <SelectItem value="tab">Tab</SelectItem>
+                        <SelectContent
+                          className={
+                            theme === "dark" ? "bg-gray-800" : "bg-white"
+                          }
+                        >
+                          <SelectItem
+                            value="2"
+                            className={`cursor-pointer text-white ${
+                              theme === "dark"
+                                ? "hover:bg-gray-600"
+                                : "hover:bg-gray-200 text-black"
+                            }`}
+                          >
+                            2 spaces
+                          </SelectItem>
+                          <SelectItem
+                            value="4"
+                            className={`cursor-pointer text-white ${
+                              theme === "dark"
+                                ? "hover:bg-gray-600"
+                                : "hover:bg-gray-200 text-black"
+                            }`}
+                          >
+                            4 spaces
+                          </SelectItem>
+                          <SelectItem
+                            value="8"
+                            className={`cursor-pointer text-white ${
+                              theme === "dark"
+                                ? "hover:bg-gray-600"
+                                : "hover:bg-gray-200 text-black"
+                            }`}
+                          >
+                            8 spaces
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -584,7 +1079,9 @@ const CodingEnvi = () => {
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-medium mb-2">Collaboration Settings</h3>
+                  <h3 className="text-lg font-medium mb-2">
+                    Collaboration Settings
+                  </h3>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Auto-save</span>
@@ -592,7 +1089,9 @@ const CodingEnvi = () => {
                         variant="outline"
                         size="sm"
                         className={`rounded-lg bg-transparent ${
-                          theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+                          theme === "light"
+                            ? "hover:bg-gray-100 text-black"
+                            : "hover:bg-gray-800 text-white"
                         } border border-gray-11`}
                       >
                         Enabled
@@ -600,12 +1099,16 @@ const CodingEnvi = () => {
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Show cursor names</span>
+                      <span className="text-sm font-medium">
+                        Show cursor names
+                      </span>
                       <Button
                         variant="outline"
                         size="sm"
                         className={`rounded-lg bg-transparent ${
-                          theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+                          theme === "light"
+                            ? "hover:bg-gray-100 text-black"
+                            : "hover:bg-gray-800 text-white"
                         } border border-gray-11`}
                       >
                         Enabled
@@ -618,7 +1121,9 @@ const CodingEnvi = () => {
                         variant="outline"
                         size="sm"
                         className={`rounded-lg bg-transparent ${
-                          theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+                          theme === "light"
+                            ? "hover:bg-gray-100 text-black"
+                            : "hover:bg-gray-800 text-white"
                         } border border-gray-11`}
                       >
                         Enabled
@@ -630,7 +1135,6 @@ const CodingEnvi = () => {
             </div>
           )}
 
-          {/* Version Control Panel */}
           {versionControlExpanded && (
             <div className="flex-1 p-4 overflow-auto">
               <div className="flex items-center justify-between mb-4">
@@ -639,7 +1143,9 @@ const CodingEnvi = () => {
                   variant="ghost"
                   size="sm"
                   className={`rounded-xl bg-transparent border border-gray-600 ${
-                    theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+                    theme === "light"
+                      ? "hover:bg-gray-100 text-black"
+                      : "hover:bg-gray-800 text-white"
                   }`}
                   onClick={() => setVersionControlExpanded(false)}
                 >
@@ -653,7 +1159,11 @@ const CodingEnvi = () => {
                   <div className="flex items-center gap-2">
                     <GitBranch className="h-4 w-4" />
                     <span className="font-medium">main</span>
-                    <Button variant="outline" size="sm" className="rounded-xl border border-gray-400">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl border border-gray-400"
+                    >
                       Switch Branch
                     </Button>
                   </div>
@@ -687,18 +1197,30 @@ const CodingEnvi = () => {
                   <div className="space-y-2">
                     <div className="p-2 border rounded-md">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">Fix authentication bug</span>
-                        <span className="text-sm text-muted-foreground">2 hours ago</span>
+                        <span className="font-medium">
+                          Fix authentication bug
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          2 hours ago
+                        </span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">John Doe</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        John Doe
+                      </p>
                     </div>
 
                     <div className="p-2 border rounded-md">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">Add user profile page</span>
-                        <span className="text-sm text-muted-foreground">Yesterday</span>
+                        <span className="font-medium">
+                          Add user profile page
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          Yesterday
+                        </span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">Jane Smith</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Jane Smith
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -706,28 +1228,36 @@ const CodingEnvi = () => {
             </div>
           )}
 
-          {/* Console */}
           {!settingsExpanded && !versionControlExpanded && (
             <div
-              className={`border-t transition-all duration-300 ${
-                consoleExpanded ? "h-1/2" : "h-[200px]"
-              }`}
+              className="border-t relative"
+              style={{ height: `${notesHeight}px` }}
             >
+              <div
+                className="absolute top-0 left-0 right-0 h-1 bg-gray-500 cursor-ns-resize hover:bg-gray-700 transition-colors"
+                onMouseDown={handleResizeStart}
+              />
               <div className="flex items-center justify-between p-2 border-b">
                 <div className="flex items-center gap-2">
                   <Tabs defaultValue="output">
                     <TabsList>
-                      <TabsTrigger className="rounded-lg" value="console">
-                        Console
+                      <TabsTrigger className="rounded-lg" value="notes">
+                        Notes
                       </TabsTrigger>
                       <TabsTrigger className="rounded-lg" value="output">
                         Output
                       </TabsTrigger>
                     </TabsList>
-                    <TabsContent value="console" className="m-0">
-                      <div className="p-4 h-[calc(100%-45px)] overflow-auto font-mono text-sm">
-                        <div className="text-muted-foreground">{">"} Console ready</div>
-                      </div>
+                    <TabsContent value="notes" className="m-0">
+                      <ScrollArea className="p-4 h-[calc(100%-45px)] overflow-auto font-mono text-sm">
+                        <Textarea
+                          className="w-full h-full resize-none"
+                          placeholder="Add your notes here... (Persisted in real-time via Yjs)"
+                        />
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Notes and code are autosaved in real-time using Yjs.
+                        </p>
+                      </ScrollArea>
                     </TabsContent>
                     <TabsContent value="output" className="m-0">
                       <OutputPanel
@@ -740,158 +1270,118 @@ const CodingEnvi = () => {
                   </Tabs>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={`rounded-lg bg-transparent ${
-                      theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
-                    } border border-gray-11`}
-                    onClick={() => {
-                      setVersionControlExpanded(true);
-                      setSettingsExpanded(false);
-                      setConsoleExpanded(false);
-                    }}
-                  >
-                    <GitBranch className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={`rounded-lg bg-transparent ${
-                      theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
-                    } border border-gray-11`}
-                    onClick={() => {
-                      setSettingsExpanded(true);
-                      setVersionControlExpanded(false);
-                      setConsoleExpanded(false);
-                    }}
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={`rounded-lg bg-transparent ${
-                      theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
-                    } border border-gray-11`}
-                    onClick={() => setConsoleExpanded(!consoleExpanded)}
-                  >
-                    <Maximize2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Performance Metrics */}
-              <div className="absolute bottom-12 right-4 flex gap-2">
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
+                <div className="flex items-center gap-2 z-10">
+                  <div className="relative">
                     <Button
                       variant="outline"
                       size="sm"
                       className={`rounded-lg bg-transparent ${
-                        theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+                        theme === "light"
+                          ? "hover:bg-gray-100 text-black"
+                          : "hover:bg-gray-800 text-white"
                       } border border-gray-11`}
+                      onClick={() => toggleCollapsible("fetch")}
                     >
                       <Clock className="h-4 w-4 mr-2" />
-                      Fetch Time: 120ms
+                      Fetch Time
                     </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="absolute bottom-full right-0 mb-2 w-64 z-50">
-                    <Card className={`${theme === "dark" ? "bg-gray-800 text-white" : "bg-white text-black"} border`}>
-                      <CardHeader className="py-2">
-                        <CardTitle className="text-sm">Performance Metrics</CardTitle>
-                      </CardHeader>
-                      <CardContent className="py-2">
-                        <div className="text-xs space-y-1">
-                          <div className="flex justify-between">
-                            <span>Fetch Time:</span>
-                            <span>120ms</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Execution Time:</span>
-                            <span>45ms</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </CollapsibleContent>
-                </Collapsible>
+                    <Collapsible open={activeCollapsible === "fetch"}>
+                      <CollapsibleContent className="absolute top-10 right-0 z-10">
+                        <Card
+                          ref={fetchCardRef}
+                          className={`w-72 ${
+                            theme === "dark"
+                              ? "bg-gray-800 text-white"
+                              : "bg-white text-black"
+                          } border`}
+                        >
+                          <CardHeader className="py-2">
+                            <CardTitle className="text-sm">
+                              Performance Metrics
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="py-2">
+                            <div className="text-xs space-y-1">
+                              <div className="flex justify-between">
+                                <span>Fetch Time:</span>
+                                <span>
+                                  {codeOutput?.executionTime
+                                    ? `${codeOutput.executionTime}s`
+                                    : "N/A"}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Memory:</span>
+                                <span>
+                                  {codeOutput?.memory
+                                    ? `${codeOutput.memory} KB`
+                                    : "N/A"}
+                                </span>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
 
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
+                  <div className="relative">
                     <Button
                       variant="outline"
                       size="sm"
                       className={`rounded-lg bg-transparent ${
-                        theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
+                        theme === "light"
+                          ? "hover:bg-gray-100 text-black"
+                          : "hover:bg-gray-800 text-white"
                       } border border-gray-11`}
+                      onClick={() => toggleCollapsible("complexity")}
                     >
                       <Cpu className="h-4 w-4 mr-2" />
                       Complexity
                     </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="absolute bottom-full right-0 mb-2 w-64 z-50">
-                    <Card className={`${theme === "dark" ? "bg-gray-800 text-white" : "bg-white text-black"} border`}>
-                      <CardHeader className="py-2">
-                        <CardTitle className="text-sm">Complexity Analysis</CardTitle>
-                      </CardHeader>
-                      <CardContent className="py-2">
-                        <div className="text-xs space-y-1">
-                          <div className="flex justify-between">
-                            <span>Time Complexity:</span>
-                            <span>O(n)</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Space Complexity:</span>
-                            <span>O(1)</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </CollapsibleContent>
-                </Collapsible>
-
-                <Collapsible>
-                  <CollapsibleTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={`rounded-lg bg-transparent ${
-                        theme === "light" ? "hover:bg-gray-100 text-black" : "hover:bg-gray-800 text-white"
-                      } border border-gray-11`}
-                    >
-                      <Languages className="h-4 w-4 mr-2" />
-                      Translate
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="absolute bottom-full right-0 mb-2 w-64 z-50">
-                    <Card className={`${theme === "dark" ? "bg-gray-800 text-white" : "bg-white text-black"} border`}>
-                      <CardHeader className="py-2">
-                        <CardTitle className="text-sm">Code Translation</CardTitle>
-                      </CardHeader>
-                      <CardContent className="py-2">
-                        <Select defaultValue="python">
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Translate to" />
-                          </SelectTrigger>
-                          <SelectContent className="select-content">
-                            <SelectItem value="python">Python</SelectItem>
-                            <SelectItem value="java">Java</SelectItem>
-                            <SelectItem value="csharp">C#</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </CardContent>
-                    </Card>
-                  </CollapsibleContent>
-                </Collapsible>
+                    <Collapsible open={activeCollapsible === "complexity"}>
+                      <CollapsibleContent className="absolute top-10 right-0 z-10">
+                        <Card
+                          ref={complexityCardRef}
+                          className={`w-72 ${
+                            theme === "dark"
+                              ? "bg-gray-800 text-white"
+                              : "bg-white text-black"
+                          } border`}
+                        >
+                          <CardHeader className="py-2">
+                            <CardTitle className="text-sm">
+                              Complexity Analysis
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="py-2">
+                            <div className="text-xs space-y-1">
+                              <div className="flex justify-between">
+                                <span>Time Complexity:</span>
+                                <span>O(n)</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Space Complexity:</span>
+                                <span>O(1)</span>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
+                </div>
               </div>
             </div>
           )}
         </div>
 
         {/* Right Sidebar */}
-        <div className={`border-l transition-all duration-300 ${rightSidebarOpen ? "w-64" : "w-0 overflow-hidden"}`}>
+        <div
+          className={`border-l transition-all duration-300 ${
+            rightSidebarOpen ? "w-64" : "w-0 overflow-hidden"
+          }`}
+        >
           <Tabs
             value={rightSidebarTab}
             onValueChange={setRightSidebarTab}
@@ -908,14 +1398,17 @@ const CodingEnvi = () => {
               </TabsList>
             </div>
 
-            <TabsContent value="video" className="flex-1 overflow-hidden p-0 m-0 flex flex-col">
-              <div className="grid grid-cols-1 gap-2 p-2 flex-1 overflow-auto">
+            <TabsContent
+              value="video"
+              className="flex-1 overflow-hidden p-0 m-0"
+            >
+              <ScrollArea className="h-full p-2">
                 {participants
                   .filter((p) => p.videoOn || p.isActive)
                   .map((participant) => (
                     <div
                       key={participant.id}
-                      className="relative rounded-md bg-muted aspect-video"
+                      className="relative rounded-md bg-muted w-full mb-2"
                     >
                       <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
                         {participant.name}
@@ -933,10 +1426,14 @@ const CodingEnvi = () => {
                             }
                           }}
                         >
-                          <PinIcon className={`h-3 w-3 ${theme === "light" ? "text-black" : "text-white"}`} />
+                          <PinIcon
+                            className={`h-3 w-3 ${
+                              theme === "light" ? "text-black" : "text-white"
+                            }`}
+                          />
                         </Button>
                       </div>
-                      <div className="h-full flex items-center justify-center">
+                      <div className="w-full aspect-video flex items-center justify-center">
                         {participant.videoOn ? (
                           <img
                             src={participant.avatar || "/placeholder.svg"}
@@ -945,32 +1442,32 @@ const CodingEnvi = () => {
                           />
                         ) : (
                           <Avatar className="h-12 w-12">
-                            <AvatarFallback>{participant.name.charAt(0)}</AvatarFallback>
+                            <AvatarFallback>
+                              {participant.name.charAt(0)}
+                            </AvatarFallback>
                           </Avatar>
                         )}
                       </div>
                     </div>
                   ))}
-              </div>
+              </ScrollArea>
             </TabsContent>
 
-            <TabsContent value="chat" className="flex-1 overflow-hidden p-0 m-0 flex flex-col">
+            <TabsContent
+              value="chat"
+              className="flex-1 overflow-hidden p-0 m-0 flex flex-col"
+            >
               <ScrollArea className="flex-1 p-2">
-                {messages.map((message) => (
-                  <div key={message.id} className="mb-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-sm">{message.sender}</span>
-                      <span className="text-xs text-muted-foreground">{message.time}</span>
-                    </div>
-                    <div className="bg-muted p-2 rounded-md text-sm">{message.text}</div>
-                  </div>
-                ))}
+                {/* Chat messages placeholder */}
               </ScrollArea>
 
-              <div className="p-2 border-t">
+              <div className="p-2 border-t mb-12">
                 <div className="flex gap-2">
                   <Input placeholder="Type a message..." className="flex-1" />
-                  <Button size="sm" className="rounded-lg bg-black text-white hover:bg-gray-900">
+                  <Button
+                    size="sm"
+                    className="rounded-lg bg-black text-white hover:bg-gray-900"
+                  >
                     Send
                   </Button>
                 </div>
@@ -992,9 +1489,17 @@ const CodingEnvi = () => {
             onClick={() => setMicEnabled(!micEnabled)}
           >
             {micEnabled ? (
-              <Mic className={`h-7 w-7 text-${micEnabled ? "black" : "white"} bg-transparent`} />
+              <Mic
+                className={`h-7 w-7 text-${
+                  micEnabled ? "black" : "white"
+                } bg-transparent`}
+              />
             ) : (
-              <MicOff className={`h-7 w-7 bg-transparent text-${micEnabled ? "black" : "white"}`} />
+              <MicOff
+                className={`h-7 w-7 bg-transparent text-${
+                  micEnabled ? "black" : "white"
+                }`}
+              />
             )}
           </Button>
 
@@ -1007,9 +1512,17 @@ const CodingEnvi = () => {
             onClick={() => setVideoEnabled(!videoEnabled)}
           >
             {videoEnabled ? (
-              <Video className={`h-7 w-7 text-${videoEnabled ? "black" : "white"} bg-transparent`} />
+              <Video
+                className={`h-7 w-7 text-${
+                  videoEnabled ? "black" : "white"
+                } bg-transparent`}
+              />
             ) : (
-              <VideoOff className={`h-7 w-7 text-${videoEnabled ? "black" : "white"} bg-transparent`} />
+              <VideoOff
+                className={`h-7 w-7 text-${
+                  videoEnabled ? "black" : "white"
+                } bg-transparent`}
+              />
             )}
           </Button>
 
@@ -1051,7 +1564,10 @@ const CodingEnvi = () => {
           {participants
             .filter((p) => p.id === pinnedVideo)
             .map((participant) => (
-              <div key={participant.id} className="h-full flex items-center justify-center">
+              <div
+                key={participant.id}
+                className="h-full flex items-center justify-center"
+              >
                 {participant.videoOn ? (
                   <img
                     src={participant.avatar || "/placeholder.svg"}
@@ -1061,9 +1577,13 @@ const CodingEnvi = () => {
                 ) : (
                   <div className="flex flex-col items-center justify-center">
                     <Avatar className="h-16 w-16">
-                      <AvatarFallback>{participant.name.charAt(0)}</AvatarFallback>
+                      <AvatarFallback>
+                        {participant.name.charAt(0)}
+                      </AvatarFallback>
                     </Avatar>
-                    <span className="mt-2 text-sm font-medium">{participant.name}</span>
+                    <span className="mt-2 text-sm font-medium">
+                      {participant.name}
+                    </span>
                   </div>
                 )}
               </div>
