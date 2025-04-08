@@ -61,7 +61,6 @@ import {
 } from "firebase/firestore";
 import * as LivekitClient from "livekit-client";
 
-// Updated CSS styles
 const styles = `
   .participant-container {
     position: relative;
@@ -193,7 +192,6 @@ const getLiveKitToken = async (roomName, participantName) => {
   );
   if (!response.ok) {
     const errorText = await response.text();
-    console.error(`Token request failed: ${response.status} - ${errorText}`);
     throw new Error(`Failed to get token: ${response.status} - ${errorText}`);
   }
   const data = await response.json();
@@ -216,8 +214,8 @@ const CodingEnvi = () => {
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [versionControlExpanded, setVersionControlExpanded] = useState(false);
   const [rightSidebarTab, setRightSidebarTab] = useState("video");
-  const [micEnabled, setMicEnabled] = useState(true);
-  const [videoEnabled, setVideoEnabled] = useState(true);
+  const [micEnabled, setMicEnabled] = useState(false); // Initially off
+  const [videoEnabled, setVideoEnabled] = useState(false); // Initially off
   const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
   const [previousLanguage, setPreviousLanguage] = useState(initialLanguage);
   const [codeOutput, setCodeOutput] = useState(null);
@@ -247,7 +245,6 @@ const CodingEnvi = () => {
   const [room, setRoom] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [videoStreams, setVideoStreams] = useState({});
-  const [layout, setLayout] = useState("grid-1");
 
   const pinnedVideoRef = useRef(null);
   const editorRef = useRef(null);
@@ -257,7 +254,7 @@ const CodingEnvi = () => {
   const bindingRef = useRef(null);
   const editTimeouts = useRef(new Map());
   const chatScrollRef = useRef(null);
-  const videoRefs = useRef({}); // Store video element refs
+  const videoRefs = useRef({});
 
   const languages = [
     "javascript",
@@ -278,7 +275,6 @@ const CodingEnvi = () => {
     "elixir",
   ];
 
-  // Authentication Check
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setIsAuthenticated(!!user);
@@ -289,7 +285,6 @@ const CodingEnvi = () => {
     return () => unsubscribe();
   }, [navigate]);
 
-  // Firebase Participants Listener
   useEffect(() => {
     if (!auth.currentUser || !sessionId) return;
     const unsubscribe = onSnapshot(doc(db, "sessions", sessionId), (doc) => {
@@ -300,7 +295,6 @@ const CodingEnvi = () => {
     return () => unsubscribe();
   }, [sessionId]);
 
-  // Firebase Chat Listener
   useEffect(() => {
     if (!auth.currentUser || !sessionId) return;
     const messagesRef = collection(db, "sessions", sessionId, "messages");
@@ -320,7 +314,6 @@ const CodingEnvi = () => {
     return () => unsubscribe();
   }, [sessionId]);
 
-  // LiveKit Room Setup
   useEffect(() => {
     const joinRoom = async () => {
       if (!auth.currentUser || !sessionId) return;
@@ -334,33 +327,58 @@ const CodingEnvi = () => {
             resolution: LivekitClient.VideoPresets.h720.resolution,
           },
         });
+        
+        // Connect without enabling media initially
         await room.connect(
           "wss://video-chat-application-7u5wc7ae.livekit.cloud",
           token
         );
+        
         setRoom(room);
         setConnectionStatus("connected");
-        await room.localParticipant.enableCameraAndMicrophone();
-        setMicEnabled(true);
-        setVideoEnabled(true);
+        
+        // Set initial states to off
+        await room.localParticipant.setMicrophoneEnabled(false);
+        await room.localParticipant.setCameraEnabled(false);
       } catch (error) {
         console.error("Failed to join room:", error);
         setConnectionStatus("disconnected");
       }
     };
     joinRoom();
+
     return () => {
-      if (room) room.disconnect();
+      if (room) {
+        cleanupSession();
+        room.disconnect();
+      }
     };
   }, [sessionId]);
 
-  // LiveKit Track Event Listeners
+  const cleanupSession = () => {
+    // Clean up video streams
+    setVideoStreams({});
+    Object.keys(videoRefs.current).forEach((sid) => {
+      if (videoRefs.current[sid]) {
+        videoRefs.current[sid].srcObject = null;
+      }
+    });
+    videoRefs.current = {};
+    
+    // Clean up pinned video
+    setPinnedVideo(null);
+    
+    // Clean up Yjs
+    if (bindingRef.current) bindingRef.current.destroy();
+    if (providerRef.current) providerRef.current.destroy();
+    if (yDocRef.current) yDocRef.current.destroy();
+  };
+
   useEffect(() => {
     if (!room) return;
 
     const handleTrackSubscribed = (track, publication, participant) => {
       if (track.kind === "video") {
-        console.log(`Track subscribed: ${track.sid} from ${participant.identity}`);
         setVideoStreams((prev) => {
           const newStreams = { ...prev, [track.sid]: track.mediaStream };
           if (videoRefs.current[track.sid]) {
@@ -369,11 +387,14 @@ const CodingEnvi = () => {
           return newStreams;
         });
       }
+      // Audio tracks are now available to all participants
+      if (track.kind === "audio") {
+        track.attach(); // Ensure audio is attached for all participants
+      }
     };
 
     const handleTrackUnsubscribed = (track) => {
       if (track.kind === "video") {
-        console.log(`Track unsubscribed: ${track.sid}`);
         setVideoStreams((prev) => {
           const newStreams = { ...prev };
           delete newStreams[track.sid];
@@ -385,7 +406,6 @@ const CodingEnvi = () => {
 
     const handleLocalTrackPublished = (publication) => {
       if (publication.track.kind === "video") {
-        console.log(`Local track published: ${publication.trackSid}`);
         setVideoStreams((prev) => {
           const newStreams = { ...prev, [publication.trackSid]: publication.track.mediaStream };
           if (videoRefs.current[publication.trackSid]) {
@@ -398,7 +418,6 @@ const CodingEnvi = () => {
 
     const handleLocalTrackUnpublished = (publication) => {
       if (publication.track.kind === "video") {
-        console.log(`Local track unpublished: ${publication.trackSid}`);
         setVideoStreams((prev) => {
           const newStreams = { ...prev };
           delete newStreams[publication.trackSid];
@@ -421,7 +440,6 @@ const CodingEnvi = () => {
     };
   }, [room, pinnedVideo]);
 
-  // Map LiveKit Participants with Safeguards
   const livekitParticipants = useMemo(() => {
     if (!room || !room.participants) return {};
     const participants = {};
@@ -436,14 +454,9 @@ const CodingEnvi = () => {
     return participants;
   }, [room]);
 
-  // Yjs Initialization (unchanged from previous version)
   const initializeYjs = (language) => {
-    if (!editorRef.current || !monacoRef.current) {
-      console.log("Cannot initialize Yjs: missing editor or Monaco instance");
-      return;
-    }
+    if (!editorRef.current || !monacoRef.current) return;
 
-    console.log("Initializing Yjs for language:", language);
     if (bindingRef.current) bindingRef.current.destroy();
     if (providerRef.current) providerRef.current.destroy();
     if (yDocRef.current) yDocRef.current.destroy();
@@ -451,25 +464,12 @@ const CodingEnvi = () => {
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
     const wsUrl = `wss://web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
-    console.log(`Connecting to WebSocket: ${wsUrl}`);
 
     const yDoc = new Y.Doc();
     yDocRef.current = yDoc;
 
     providerRef.current = new WebsocketProvider(wsUrl, fullSessionId, yDoc, {
       resyncInterval: 2000,
-    });
-
-    providerRef.current.on("status", (event) => {
-      console.log(`WebSocket ${fullSessionId} status: ${event.status}`);
-    });
-
-    providerRef.current.on("connection-error", (err) => {
-      console.error(`WebSocket ${fullSessionId} error:`, err);
-    });
-
-    providerRef.current.on("connection-close", (event) => {
-      console.log(`WebSocket ${fullSessionId} closed:`, event);
     });
 
     const yText = yDoc.getText("monaco");
@@ -491,7 +491,6 @@ const CodingEnvi = () => {
           )?.[0];
 
       if (editingClientId) {
-        console.log("Edit from client:", editingClientId);
         setActiveEditors((prev) => {
           const newSet = new Set(prev);
           newSet.add(editingClientId);
@@ -535,8 +534,6 @@ const CodingEnvi = () => {
     editor.onDidChangeCursorSelection((e) =>
       updateCursorPosition(e.selection.getPosition())
     );
-
-    console.log(`Initialized Yjs for session: ${fullSessionId}`);
   };
 
   const handleEditorDidMount = (editor, monaco) => {
@@ -613,7 +610,7 @@ const CodingEnvi = () => {
         (!result.exitCode || result.exitCode !== 0);
       setCodeOutput(result);
       setFetchTime((endTime - startTime).toFixed(2));
-      setComplexity("O(n)"); // Placeholder; replace with actual logic if available
+      setComplexity("O(n)");
     } catch (err) {
       setError(err);
     } finally {
@@ -692,6 +689,28 @@ const CodingEnvi = () => {
     };
   }, [isResizing]);
 
+  const toggleVideo = async () => {
+    if (room && room.localParticipant) {
+      try {
+        if (!videoEnabled) {
+          // Request permission when turning on
+          const permission = await navigator.mediaDevices.getUserMedia({
+            video: true,
+          });
+          permission.getTracks().forEach((track) => track.stop()); // Stop the temporary stream
+          
+          await room.localParticipant.setCameraEnabled(true);
+          setVideoEnabled(true);
+        } else {
+          await room.localParticipant.setCameraEnabled(false);
+          setVideoEnabled(false);
+        }
+      } catch (error) {
+        console.error("Error toggling video:", error);
+      }
+    }
+  };
+
   if (isAuthenticated === undefined) {
     return <div>Loading...</div>;
   }
@@ -717,7 +736,7 @@ const CodingEnvi = () => {
             }`}
             onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
           >
-            <Users className={`w-5 h-5 bg-transparent`} />
+            <Users className="w-5 h-5 bg-transparent" />
           </Button>
           <div className="w-[215px] h-[50px] flex items-center justify-center bg-transparent">
             <span>CollabX - Session: {sessionId}</span>
@@ -753,7 +772,7 @@ const CodingEnvi = () => {
               <TooltipTrigger asChild>
                 <Button
                   variant="default"
-                  className={`rounded-lg bg-green-700 hover:bg-green-600 text-white`}
+                  className="rounded-lg bg-green-700 hover:bg-green-600 text-white"
                   onClick={() => handleRunCode()}
                   disabled={isLoading}
                 >
@@ -789,6 +808,8 @@ const CodingEnvi = () => {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
+
+
                   variant="outline"
                   className={`rounded-lg bg-transparent ${
                     theme === "light"
@@ -945,20 +966,15 @@ const CodingEnvi = () => {
                       <div className="flex items-center gap-2">
                         <span className="text-sm">{displayName}</span>
                         <div className="flex gap-1">
-                          {micOn ? (
-                            <Mic className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <MicOff className="h-4 w-4 text-red-500" />
-                          )}
-                          {videoOn ? (
-                            <Video className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <VideoOff className="h-4 w-4 text-red-500" />
-                          )}
+                          <span className={micOn ? "text-green-500" : "text-red-500"}>
+                            {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                          </span>
+                          <span className={videoOn ? "text-green-500" : "text-red-500"}>
+                            {videoOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                          </span>
                         </div>
                       </div>
                     )}
-ledged
                   </div>
                 );
               })}
@@ -1308,7 +1324,7 @@ ledged
               className="flex-1 overflow-auto p-0 m-0 right-sidebar-content"
             >
               <div className="p-2 border-b">
-                <Select value={layout} onValueChange={setLayout}>
+                <Select>
                   <SelectTrigger>
                     <SelectValue placeholder="Select layout" />
                   </SelectTrigger>
@@ -1319,7 +1335,7 @@ ledged
                 </Select>
               </div>
               <div className="p-2 flex-1 overflow-auto">
-                <div className={`video-grid ${layout}`}>
+                <div className="video-grid">
                   {Object.entries(videoStreams).map(([sid, stream]) => (
                     <div key={sid} className="video-wrapper">
                       <video
@@ -1472,7 +1488,6 @@ ledged
                 try {
                   await room.localParticipant.setMicrophoneEnabled(!micEnabled);
                   setMicEnabled(!micEnabled);
-                  console.log(`Mic toggled to: ${!micEnabled}`);
                 } catch (error) {
                   console.error("Error toggling mic:", error);
                 }
@@ -1500,17 +1515,7 @@ ledged
             className={`rounded-full border border-gray-400 hover:bg-${
               videoEnabled ? "gray-100" : "gray-800"
             } bg-${videoEnabled ? "white" : "black"}`}
-            onClick={async () => {
-              if (room && room.localParticipant) {
-                try {
-                  await room.localParticipant.setCameraEnabled(!videoEnabled);
-                  setVideoEnabled(!videoEnabled);
-                  console.log(`Video toggled to: ${!videoEnabled}`);
-                } catch (error) {
-                  console.error("Error toggling video:", error);
-                }
-              }
-            }}
+            onClick={toggleVideo}
           >
             {videoEnabled ? (
               <Video
@@ -1533,6 +1538,7 @@ ledged
             className="rounded-lg bg-red-700 text-white hover:bg-red-600"
             onClick={() => {
               if (room) {
+                cleanupSession();
                 room.disconnect();
               }
               navigate("/");
