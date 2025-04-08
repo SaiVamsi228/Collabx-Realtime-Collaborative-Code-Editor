@@ -61,7 +61,7 @@ import {
 } from "firebase/firestore";
 import * as LivekitClient from "livekit-client";
 
-// CSS styles remain the same
+// Updated CSS styles
 const styles = `
   .participant-container {
     position: relative;
@@ -88,24 +88,37 @@ const styles = `
     100% { background-position: 0% 0%; }
   }
 
+  .video-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
   .video-grid.grid-1 .video-wrapper {
     width: 100%;
   }
 
   .video-grid.grid-2 .video-wrapper {
-    width: 50%;
+    width: calc(50% - 4px);
   }
 
   .video-wrapper {
     position: relative;
-    margin-bottom: 8px;
+    flex-grow: 1;
   }
 
   .video-wrapper video {
     width: 100%;
-    height: auto;
+    height: 100%;
+    object-fit: cover;
     border-radius: 4px;
     background-color: #333;
+  }
+
+  .right-sidebar-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
   }
 `;
 
@@ -244,6 +257,7 @@ const CodingEnvi = () => {
   const bindingRef = useRef(null);
   const editTimeouts = useRef(new Map());
   const chatScrollRef = useRef(null);
+  const videoRefs = useRef({}); // Store video element refs
 
   const languages = [
     "javascript",
@@ -327,6 +341,8 @@ const CodingEnvi = () => {
         setRoom(room);
         setConnectionStatus("connected");
         await room.localParticipant.enableCameraAndMicrophone();
+        setMicEnabled(true);
+        setVideoEnabled(true);
       } catch (error) {
         console.error("Failed to join room:", error);
         setConnectionStatus("disconnected");
@@ -344,15 +360,20 @@ const CodingEnvi = () => {
 
     const handleTrackSubscribed = (track, publication, participant) => {
       if (track.kind === "video") {
-        setVideoStreams((prev) => ({
-          ...prev,
-          [track.sid]: track.mediaStream,
-        }));
+        console.log(`Track subscribed: ${track.sid} from ${participant.identity}`);
+        setVideoStreams((prev) => {
+          const newStreams = { ...prev, [track.sid]: track.mediaStream };
+          if (videoRefs.current[track.sid]) {
+            videoRefs.current[track.sid].srcObject = track.mediaStream;
+          }
+          return newStreams;
+        });
       }
     };
 
     const handleTrackUnsubscribed = (track) => {
       if (track.kind === "video") {
+        console.log(`Track unsubscribed: ${track.sid}`);
         setVideoStreams((prev) => {
           const newStreams = { ...prev };
           delete newStreams[track.sid];
@@ -364,15 +385,20 @@ const CodingEnvi = () => {
 
     const handleLocalTrackPublished = (publication) => {
       if (publication.track.kind === "video") {
-        setVideoStreams((prev) => ({
-          ...prev,
-          [publication.trackSid]: publication.track.mediaStream,
-        }));
+        console.log(`Local track published: ${publication.trackSid}`);
+        setVideoStreams((prev) => {
+          const newStreams = { ...prev, [publication.trackSid]: publication.track.mediaStream };
+          if (videoRefs.current[publication.trackSid]) {
+            videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
+          }
+          return newStreams;
+        });
       }
     };
 
     const handleLocalTrackUnpublished = (publication) => {
       if (publication.track.kind === "video") {
+        console.log(`Local track unpublished: ${publication.trackSid}`);
         setVideoStreams((prev) => {
           const newStreams = { ...prev };
           delete newStreams[publication.trackSid];
@@ -410,7 +436,7 @@ const CodingEnvi = () => {
     return participants;
   }, [room]);
 
-  // Yjs Initialization
+  // Yjs Initialization (unchanged from previous version)
   const initializeYjs = (language) => {
     if (!editorRef.current || !monacoRef.current) {
       console.log("Cannot initialize Yjs: missing editor or Monaco instance");
@@ -875,7 +901,7 @@ const CodingEnvi = () => {
                 Participants
               </h2>
             </div>
-            <div className="flex-1 overflow-auto p-2">
+            <ScrollArea className="flex-1 p-2">
               {participants.map((participant) => {
                 const states =
                   providerRef.current?.awareness?.getStates() || new Map();
@@ -885,8 +911,8 @@ const CodingEnvi = () => {
                 const clientId = state ? state[0] : null;
                 const isActive = activeEditors.has(clientId);
                 const livekitParticipant = livekitParticipants[participant.uid];
-                const micOn = livekitParticipant?.isMicrophoneEnabled;
-                const videoOn = livekitParticipant?.isCameraEnabled;
+                const micOn = livekitParticipant?.isMicrophoneEnabled || false;
+                const videoOn = livekitParticipant?.isCameraEnabled || false;
                 const displayName = participant.username || "Anonymous";
                 return (
                   <div
@@ -914,34 +940,29 @@ const CodingEnvi = () => {
                             .toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      {leftSidebarOpen && (
-                        <div className="absolute -bottom-1 -right-1 flex gap-1">
-                          {micOn && (
-                            <Badge
-                              variant="secondary"
-                              className="h-5 w-5 p-0 flex items-center justify-center"
-                            >
-                              <Mic className="h-3 w-3" />
-                            </Badge>
-                          )}
-                          {videoOn && (
-                            <Badge
-                              variant="secondary"
-                              className="h-5 w-5 p-0 flex items-center justify-center"
-                            >
-                              <Video className="h-3 w-3" />
-                            </Badge>
-                          )}
-                        </div>
-                      )}
                     </div>
                     {leftSidebarOpen && (
-                      <span className="text-sm">{displayName}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{displayName}</span>
+                        <div className="flex gap-1">
+                          {micOn ? (
+                            <Mic className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <MicOff className="h-4 w-4 text-red-500" />
+                          )}
+                          {videoOn ? (
+                            <Video className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <VideoOff className="h-4 w-4 text-red-500" />
+                          )}
+                        </div>
+                      </div>
                     )}
+ledged
                   </div>
                 );
               })}
-            </div>
+            </ScrollArea>
           </div>
         </div>
 
@@ -1144,7 +1165,7 @@ const CodingEnvi = () => {
                             className={`cursor-pointer text-white ${
                               theme === "dark"
                                 ? "hover:bg-gray-600"
-                                : "hover:bg جلو-gray-200 text-black"
+                                : "hover:bg-gray-200 text-black"
                             }`}
                           >
                             2 spaces
@@ -1284,7 +1305,7 @@ const CodingEnvi = () => {
 
             <TabsContent
               value="video"
-              className="flex-1 overflow-hidden p-0 m-0"
+              className="flex-1 overflow-auto p-0 m-0 right-sidebar-content"
             >
               <div className="p-2 border-b">
                 <Select value={layout} onValueChange={setLayout}>
@@ -1297,12 +1318,17 @@ const CodingEnvi = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <ScrollArea className="h-full p-2">
+              <div className="p-2 flex-1 overflow-auto">
                 <div className={`video-grid ${layout}`}>
                   {Object.entries(videoStreams).map(([sid, stream]) => (
                     <div key={sid} className="video-wrapper">
                       <video
-                        srcObject={stream}
+                        ref={(el) => {
+                          if (el) {
+                            videoRefs.current[sid] = el;
+                            el.srcObject = stream;
+                          }
+                        }}
                         autoPlay
                         playsInline
                         muted={sid.includes(auth.currentUser?.uid)}
@@ -1333,7 +1359,7 @@ const CodingEnvi = () => {
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             </TabsContent>
 
             <TabsContent
@@ -1442,9 +1468,14 @@ const CodingEnvi = () => {
             } bg-${micEnabled ? "white" : "black"}`}
             size="icon"
             onClick={async () => {
-              if (room) {
-                await room.localParticipant.setMicrophoneEnabled(!micEnabled);
-                setMicEnabled(!micEnabled);
+              if (room && room.localParticipant) {
+                try {
+                  await room.localParticipant.setMicrophoneEnabled(!micEnabled);
+                  setMicEnabled(!micEnabled);
+                  console.log(`Mic toggled to: ${!micEnabled}`);
+                } catch (error) {
+                  console.error("Error toggling mic:", error);
+                }
               }
             }}
           >
@@ -1470,9 +1501,14 @@ const CodingEnvi = () => {
               videoEnabled ? "gray-100" : "gray-800"
             } bg-${videoEnabled ? "white" : "black"}`}
             onClick={async () => {
-              if (room) {
-                await room.localParticipant.setCameraEnabled(!videoEnabled);
-                setVideoEnabled(!videoEnabled);
+              if (room && room.localParticipant) {
+                try {
+                  await room.localParticipant.setCameraEnabled(!videoEnabled);
+                  setVideoEnabled(!videoEnabled);
+                  console.log(`Video toggled to: ${!videoEnabled}`);
+                } catch (error) {
+                  console.error("Error toggling video:", error);
+                }
               }
             }}
           >
@@ -1522,7 +1558,12 @@ const CodingEnvi = () => {
           onMouseDown={handleMouseDown}
         >
           <video
-            srcObject={videoStreams[pinnedVideo]}
+            ref={(el) => {
+              if (el) {
+                videoRefs.current[pinnedVideo] = el;
+                el.srcObject = videoStreams[pinnedVideo];
+              }
+            }}
             autoPlay
             playsInline
             muted={pinnedVideo.includes(auth.currentUser?.uid)}
