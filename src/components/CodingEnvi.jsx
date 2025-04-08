@@ -420,28 +420,29 @@ const CodingEnvi = () => {
       console.log("Cannot initialize Yjs: missing editor or Monaco instance");
       return;
     }
-
+  
     console.log("Initializing Yjs for language:", language);
     if (bindingRef.current) bindingRef.current.destroy();
     if (providerRef.current) providerRef.current.destroy();
     if (yDocRef.current) yDocRef.current.destroy();
-
-    const fullSessionId = `${sessionId}-${language}`;
+  
+    const fullSessionId = `${sessionId}-${language}`; // e.g., "jcF8UpsI5cblKDFwZBMeQCLM4t93-1744133480667-javascript"
     const encodedSessionId = encodeURIComponent(fullSessionId);
     const wsUrl = `wss://web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
     console.log(`Connecting to WebSocket: ${wsUrl}`);
-
+  
     const yDoc = new Y.Doc();
     yDocRef.current = yDoc;
-
+  
+    // Use fullSessionId only as the room name, not appended to the URL again
     providerRef.current = new WebsocketProvider(wsUrl, fullSessionId, yDoc, {
       resyncInterval: 2000,
     });
-
+  
     providerRef.current.on("status", (event) => {
       console.log(`WebSocket ${fullSessionId} status: ${event.status}`);
     });
-
+  
     providerRef.current.on("connection-error", (err) => {
       console.error(`WebSocket ${fullSessionId} error:`, err);
     });
