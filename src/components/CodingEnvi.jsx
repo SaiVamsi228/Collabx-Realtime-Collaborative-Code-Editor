@@ -173,7 +173,6 @@ const OutputPanel = ({
 };
 
 // Function to get LiveKit token from the deployed server
-// Function to get LiveKit token from the deployed server
 const getLiveKitToken = async (roomName, participantName) => {
   const response = await fetch(
     `https://livekit-token-server-production.up.railway.app/get-token?roomName=${encodeURIComponent(
@@ -191,41 +190,6 @@ const getLiveKitToken = async (roomName, participantName) => {
   }
   return data.token;
 };
-
-// LiveKit Room Setup
-useEffect(() => {
-  const joinRoom = async () => {
-    if (!auth.currentUser) return;
-    try {
-      setConnectionStatus("connecting");
-      const token = await getLiveKitToken(sessionId, auth.currentUser.uid);
-      const room = new LivekitClient.Room({
-        adaptiveStream: true,
-        dynacast: true,
-        videoCaptureDefaults: {
-          resolution: LivekitClient.VideoPresets.h720.resolution,
-        },
-      });
-      await room.connect(
-        "wss://video-chat-application-7u5wc7ae.livekit.cloud",
-        token
-      );
-      setRoom(room);
-      setConnectionStatus("connected");
-      await room.localParticipant.enableCameraAndMicrophone();
-    } catch (error) {
-      console.error("Failed to join room:", error);
-      setConnectionStatus("disconnected");
-    }
-  };
-  joinRoom();
-
-  return () => {
-    if (room) {
-      room.disconnect();
-    }
-  };
-}, [sessionId]);
 
 const CodingEnvi = () => {
   const { sessionId } = useParams();
@@ -314,7 +278,7 @@ const CodingEnvi = () => {
 
   // Firebase Participants Listener
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || !sessionId) return;
     const unsubscribe = onSnapshot(doc(db, "sessions", sessionId), (doc) => {
       if (doc.exists()) {
         setParticipants(doc.data().participants || []);
@@ -325,7 +289,7 @@ const CodingEnvi = () => {
 
   // Firebase Chat Listener with Fixed Auto-Scroll
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || !sessionId) return;
 
     const messagesRef = collection(db, "sessions", sessionId, "messages");
     const q = query(messagesRef, orderBy("timestamp", "asc"));
@@ -350,7 +314,7 @@ const CodingEnvi = () => {
   // LiveKit Room Setup
   useEffect(() => {
     const joinRoom = async () => {
-      if (!auth.currentUser) return;
+      if (!auth.currentUser || !sessionId) return;
       try {
         setConnectionStatus("connecting");
         const token = await getLiveKitToken(sessionId, auth.currentUser.uid);
@@ -380,7 +344,7 @@ const CodingEnvi = () => {
         room.disconnect();
       }
     };
-  }, [sessionId]);
+  }, [sessionId, room]); // Added 'room' to dependencies to ensure cleanup works correctly
 
   // LiveKit Track Event Listeners
   useEffect(() => {
