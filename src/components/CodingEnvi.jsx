@@ -61,7 +61,7 @@ import {
 } from "firebase/firestore";
 import * as LivekitClient from "livekit-client";
 
-// Add this CSS to your `CodingEnvi.css` file
+// CSS styles remain the same
 const styles = `
   .participant-container {
     position: relative;
@@ -172,7 +172,6 @@ const OutputPanel = ({
   );
 };
 
-// Function to get LiveKit token from the deployed server
 const getLiveKitToken = async (roomName, participantName) => {
   const response = await fetch(
     `https://livekit-token-server-production.up.railway.app/get-token?roomName=${encodeURIComponent(
@@ -287,27 +286,23 @@ const CodingEnvi = () => {
     return () => unsubscribe();
   }, [sessionId]);
 
-  // Firebase Chat Listener with Fixed Auto-Scroll
+  // Firebase Chat Listener
   useEffect(() => {
     if (!auth.currentUser || !sessionId) return;
-
     const messagesRef = collection(db, "sessions", sessionId, "messages");
     const q = query(messagesRef, orderBy("timestamp", "asc"));
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const messages = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
       setChatMessages(messages);
-
       setTimeout(() => {
         if (chatScrollRef.current) {
           chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
         }
       }, 100);
     });
-
     return () => unsubscribe();
   }, [sessionId]);
 
@@ -338,13 +333,10 @@ const CodingEnvi = () => {
       }
     };
     joinRoom();
-
     return () => {
-      if (room) {
-        room.disconnect();
-      }
+      if (room) room.disconnect();
     };
-  }, [sessionId, room]); // Added 'room' to dependencies to ensure cleanup works correctly
+  }, [sessionId]);
 
   // LiveKit Track Event Listeners
   useEffect(() => {
@@ -403,14 +395,18 @@ const CodingEnvi = () => {
     };
   }, [room, pinnedVideo]);
 
-  // Map LiveKit Participants
+  // Map LiveKit Participants with Safeguards
   const livekitParticipants = useMemo(() => {
-    if (!room) return {};
+    if (!room || !room.participants) return {};
     const participants = {};
-    participants[room.localParticipant.identity] = room.localParticipant;
-    room.participants.forEach((p) => {
-      participants[p.identity] = p;
-    });
+    if (room.localParticipant) {
+      participants[room.localParticipant.identity] = room.localParticipant;
+    }
+    if (room.participants instanceof Map) {
+      room.participants.forEach((p) => {
+        participants[p.identity] = p;
+      });
+    }
     return participants;
   }, [room]);
 
@@ -420,31 +416,34 @@ const CodingEnvi = () => {
       console.log("Cannot initialize Yjs: missing editor or Monaco instance");
       return;
     }
-  
+
     console.log("Initializing Yjs for language:", language);
     if (bindingRef.current) bindingRef.current.destroy();
     if (providerRef.current) providerRef.current.destroy();
     if (yDocRef.current) yDocRef.current.destroy();
-  
-    const fullSessionId = `${sessionId}-${language}`; // e.g., "jcF8UpsI5cblKDFwZBMeQCLM4t93-1744133480667-javascript"
+
+    const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
     const wsUrl = `wss://web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
     console.log(`Connecting to WebSocket: ${wsUrl}`);
-  
+
     const yDoc = new Y.Doc();
     yDocRef.current = yDoc;
-  
-    // Use fullSessionId only as the room name, not appended to the URL again
+
     providerRef.current = new WebsocketProvider(wsUrl, fullSessionId, yDoc, {
       resyncInterval: 2000,
     });
-  
+
     providerRef.current.on("status", (event) => {
       console.log(`WebSocket ${fullSessionId} status: ${event.status}`);
     });
-  
+
     providerRef.current.on("connection-error", (err) => {
       console.error(`WebSocket ${fullSessionId} error:`, err);
+    });
+
+    providerRef.current.on("connection-close", (event) => {
+      console.log(`WebSocket ${fullSessionId} closed:`, event);
     });
 
     const yText = yDoc.getText("monaco");
@@ -459,7 +458,7 @@ const CodingEnvi = () => {
       const transaction = event.transaction;
       let editingClientId = transaction.local
         ? providerRef.current.awareness.clientID
-        : Array.from(transaction.afterState).find(
+        : Array.from(transaction.afterState || []).find(
             ([clientId, clock]) =>
               !transaction.beforeState.has(clientId) ||
               transaction.beforeState.get(clientId) < clock
@@ -557,7 +556,7 @@ const CodingEnvi = () => {
       if (yDocRef.current) yDocRef.current.destroy();
       editTimeouts.current.clear();
     };
-  }, [isEditorReady, selectedLanguage, sessionId, location.state]);
+  }, [isEditorReady, selectedLanguage, sessionId]);
 
   useEffect(() => {
     setMonacoTheme(theme === "dark" ? "vs-dark" : "light");
@@ -878,9 +877,11 @@ const CodingEnvi = () => {
             </div>
             <div className="flex-1 overflow-auto p-2">
               {participants.map((participant) => {
-                const state = Array.from(
-                  providerRef.current?.awareness.getStates() || []
-                ).find(([_, s]) => s.user?.id === participant.uid);
+                const states =
+                  providerRef.current?.awareness?.getStates() || new Map();
+                const state = Array.from(states).find(
+                  ([_, s]) => s.user?.id === participant.uid
+                );
                 const clientId = state ? state[0] : null;
                 const isActive = activeEditors.has(clientId);
                 const livekitParticipant = livekitParticipants[participant.uid];
@@ -1143,7 +1144,7 @@ const CodingEnvi = () => {
                             className={`cursor-pointer text-white ${
                               theme === "dark"
                                 ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
+                                : "hover:bg جلو-gray-200 text-black"
                             }`}
                           >
                             2 spaces
@@ -1304,7 +1305,7 @@ const CodingEnvi = () => {
                         srcObject={stream}
                         autoPlay
                         playsInline
-                        muted={sid.includes(auth.currentUser?.uid)} // Mute local video
+                        muted={sid.includes(auth.currentUser?.uid)}
                       />
                       <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
                         {sid.includes(auth.currentUser?.uid)
@@ -1498,7 +1499,7 @@ const CodingEnvi = () => {
               if (room) {
                 room.disconnect();
               }
-              navigate("/"); // Adjust navigation as needed
+              navigate("/");
             }}
           >
             <LogOut className="h-4 w-4 mr-2" />
