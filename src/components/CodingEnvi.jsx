@@ -174,13 +174,26 @@ const OutputPanel = ({
 
 // Function to get LiveKit token from the deployed server
 const getLiveKitToken = async (roomName, identity) => {
+  const apiKey = "APIuNjuFLnWmpeU"; // Replace with your actual API key
+  const apiSecret = "iDAvIJxwmAAnSs5fJG7OXxWjhPaPzDdeQxXEWAo8QYf"; // Replace with your actual API secret
   const response = await fetch(
     `https://livekit-token-server-production.up.railway.app/get-token?roomName=${encodeURIComponent(
       roomName
-    )}&identity=${encodeURIComponent(identity)}`
+    )}&identity=${encodeURIComponent(
+      identity
+    )}&apiKey=${encodeURIComponent(apiKey)}&apiSecret=${encodeURIComponent(
+      apiSecret
+    )}`,
+    {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
   );
   if (!response.ok) {
-    throw new Error("Failed to get token");
+    const errorText = await response.text();
+    throw new Error(`Failed to get token: ${response.status} - ${errorText}`);
   }
   const data = await response.json();
   if (!data.success || !data.token) {
