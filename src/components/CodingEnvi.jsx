@@ -207,14 +207,12 @@ const CodingEnvi = () => {
   
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
-    // Include sessionId directly in the URL, matching old code
     const wsUrl = `wss://web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
-    console.log(`Attempting to connect to WebSocket: ${wsUrl}`);
-  
+    console.log(`Connecting to WebSocket: ${wsUrl}`);
+
     const yDoc = new Y.Doc();
-    yDocRef.current = yDoc;
-  
-    // Pass the full URL and use fullSessionId as room name, no params needed
+    currentYDocRef.current = yDoc;
+
     providerRef.current = new WebsocketProvider(wsUrl, fullSessionId, yDoc, {
       resyncInterval: 2000,
     });
