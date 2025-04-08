@@ -199,32 +199,40 @@ const CodingEnvi = () => {
       console.log("Cannot initialize Yjs: missing editor or Monaco instance");
       return;
     }
-
+  
     console.log("Initializing Yjs for language:", language);
     if (bindingRef.current) bindingRef.current.destroy();
     if (providerRef.current) providerRef.current.destroy();
     if (yDocRef.current) yDocRef.current.destroy();
-
+  
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
-    const wsUrl = `wss://web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
-    console.log(`Connecting to WebSocket: ${wsUrl}`);
-
+    // Base URL without sessionId in the path
+    const wsUrl = `wss://web-socket-server-production-bbc3.up.railway.app`;
+    console.log(`Attempting to connect to WebSocket: ${wsUrl}?sessionId=${encodedSessionId}`);
+  
     const yDoc = new Y.Doc();
     yDocRef.current = yDoc;
-
-    providerRef.current = new WebsocketProvider(wsUrl, fullSessionId, yDoc, {
-      resyncInterval: 2000,
-    });
-
+  
+    // Use fullSessionId as the room name, not part of the URL path
+    providerRef.current = new WebsocketProvider(
+      wsUrl,
+      fullSessionId, // Room name for Yjs
+      yDoc,
+      {
+        resyncInterval: 2000,
+        params: { sessionId: encodedSessionId }, // Pass sessionId as a query param
+      }
+    );
+  
     providerRef.current.on("status", (event) => {
       console.log(`WebSocket ${fullSessionId} status: ${event.status}`);
     });
-
+  
     providerRef.current.on("connection-error", (err) => {
       console.error(`WebSocket ${fullSessionId} error:`, err);
     });
-
+  
     const yText = yDoc.getText("monaco");
     bindingRef.current = new MonacoBinding(
       yText,
@@ -232,7 +240,7 @@ const CodingEnvi = () => {
       new Set([editorRef.current]),
       providerRef.current.awareness
     );
-
+  
     yText.observe((event) => {
       const transaction = event.transaction;
       let editingClientId = transaction.local
@@ -242,7 +250,7 @@ const CodingEnvi = () => {
               !transaction.beforeState.has(clientId) ||
               transaction.beforeState.get(clientId) < clock
           )?.[0];
-
+  
       if (editingClientId) {
         console.log("Edit from client:", editingClientId);
         setActiveEditors((prev) => new Set(prev).add(editingClientId));
@@ -260,7 +268,7 @@ const CodingEnvi = () => {
         editTimeouts.current.set(editingClientId, timeoutId);
       }
     });
-
+  
     const editor = editorRef.current;
     const awareness = providerRef.current.awareness;
     const localColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
@@ -269,21 +277,21 @@ const CodingEnvi = () => {
     awareness.setLocalStateField("user", {
       name: localName,
       color: localColor,
-      id: auth.currentUser?.uid, // Consistent ID usage
+      id: auth.currentUser?.uid,
     });
-
+  
     const updateCursorPosition = (position) => {
       awareness.setLocalStateField("cursor", {
         line: position.lineNumber,
         column: position.column,
       });
     };
-
+  
     editor.onDidChangeCursorPosition((e) => updateCursorPosition(e.position));
     editor.onDidChangeCursorSelection((e) =>
       updateCursorPosition(e.selection.getPosition())
     );
-
+  
     console.log(`Initialized Yjs for session: ${fullSessionId}`);
   };
 
