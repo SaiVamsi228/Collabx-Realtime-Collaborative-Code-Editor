@@ -38,11 +38,6 @@ import {
 } from "./ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Badge } from "./ui/badge";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "./ui/collapsible";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
@@ -57,6 +52,45 @@ import { MonacoBinding } from "y-monaco";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { doc, onSnapshot } from "firebase/firestore";
+
+// Add this CSS to your `CodingEnvi.css` file
+const styles = `
+  .participant-container {
+    position: relative;
+    padding: 8px;
+    border-radius: 6px;
+    transition: background-color 0.3s ease;
+  }
+
+  .participant-container.active::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 8px;
+    padding: 2px;
+    background: linear-gradient(45deg, #00ff00, #00cc00, #009900, #00ff00);
+    background-size: 200% 200%;
+    animation: rotateGradient 2s linear infinite;
+    z-index: -1;
+  }
+
+  @keyframes rotateGradient {
+    0% {
+      background-position: 0% 0%;
+    }
+    50% {
+      background-position: 100% 100%;
+    }
+    100% {
+      background-position: 0% 0%;
+    }
+  }
+`;
+
+// Inject styles into the document (alternatively, add to your CSS file)
+const styleSheet = document.createElement("style");
+styleSheet.textContent = styles;
+document.head.appendChild(styleSheet);
 
 const OutputPanel = ({ result, isLoading, error, theme }) => {
   return (
@@ -239,7 +273,11 @@ const CodingEnvi = () => {
 
       if (editingClientId) {
         console.log("Edit from client:", editingClientId);
-        setActiveEditors((prev) => new Set(prev).add(editingClientId));
+        setActiveEditors((prev) => {
+          const newSet = new Set(prev);
+          newSet.add(editingClientId);
+          return newSet;
+        });
         if (editTimeouts.current.has(editingClientId)) {
           clearTimeout(editTimeouts.current.get(editingClientId));
         }
@@ -250,7 +288,7 @@ const CodingEnvi = () => {
             return newSet;
           });
           editTimeouts.current.delete(editingClientId);
-        }, 250);
+        }, 250); // Remove after 250ms of inactivity
         editTimeouts.current.set(editingClientId, timeoutId);
       }
     });
@@ -439,7 +477,6 @@ const CodingEnvi = () => {
             <Users className={`w-5 h-5 bg-transparent`} />
           </Button>
           <div className="w-[215px] h-[50px] flex items-center justify-center bg-transparent">
-            {/* No SVG as requested */}
             <span>CollabX - Session: {sessionId}</span>
           </div>
         </div>
@@ -613,8 +650,6 @@ const CodingEnvi = () => {
         <div
           className={`border-r transition-all duration-300 ${
             leftSidebarOpen ? "w-64" : "w-16"
- 
-   
           }`}
         >
           <div className="h-full flex flex-col">
@@ -627,17 +662,19 @@ const CodingEnvi = () => {
               {participants.map((participant) => {
                 const state = Array.from(
                   providerRef.current?.awareness.getStates() || []
-                ).find(([_, s]) => s.user?.id === participant.id);
+                ).find(([_, s]) => s.user?.id === participant.uid); // Match by uid
                 const clientId = state ? state[0] : null;
                 const isActive = activeEditors.has(clientId);
                 const userColor = state ? state[1].user.color : "#888888";
                 const displayName = participant.username || "Anonymous";
                 return (
                   <div
-                    key={participant.id}
-                    className={`flex items-center gap-2 p-2 rounded-md hover:bg-muted ${
+                    key={participant.uid}
+                    className={`participant-container ${
+                      isActive ? "active" : ""
+                    } flex items-center gap-2 p-2 rounded-md hover:bg-muted ${
                       !leftSidebarOpen && "justify-center"
-                    } ${isActive ? "bg-muted/50" : ""}`}
+                    }`}
                   >
                     <div className="relative">
                       <Avatar
@@ -1031,7 +1068,7 @@ const CodingEnvi = () => {
                   .filter((p) => p.videoOn || p.isActive)
                   .map((participant) => (
                     <div
-                      key={participant.id}
+                      key={participant.uid}
                       className="relative rounded-md bg-muted w-full mb-2"
                     >
                       <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
@@ -1043,10 +1080,10 @@ const CodingEnvi = () => {
                           size="icon"
                           className="h-6 w-6 bg-background/80 hover:bg-background"
                           onClick={() => {
-                            if (pinnedVideo === participant.id) {
+                            if (pinnedVideo === participant.uid) {
                               setPinnedVideo(null);
                             } else {
-                              setPinnedVideo(participant.id);
+                              setPinnedVideo(participant.uid);
                             }
                           }}
                         >
@@ -1186,10 +1223,10 @@ const CodingEnvi = () => {
           </div>
 
           {participants
-            .filter((p) => p.id === pinnedVideo)
+            .filter((p) => p.uid === pinnedVideo)
             .map((participant) => (
               <div
-                key={participant.id}
+                key={participant.uid}
                 className="h-full flex items-center justify-center"
               >
                 {participant.videoOn ? (
