@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   Users,
   Play,
@@ -59,6 +59,7 @@ import {
   query,
   orderBy,
 } from "firebase/firestore";
+import * as LivekitClient from "livekit-client";
 
 // Add this CSS to your `CodingEnvi.css` file
 const styles = `
@@ -82,15 +83,29 @@ const styles = `
   }
 
   @keyframes rotateGradient {
-    0% {
-      background-position: 0% 0%;
-    }
-    50% {
-      background-position: 100% 100%;
-    }
-    100% {
-      background-position: 0% 0%;
-    }
+    0% { background-position: 0% 0%; }
+    50% { background-position: 100% 100%; }
+    100% { background-position: 0% 0%; }
+  }
+
+  .video-grid.grid-1 .video-wrapper {
+    width: 100%;
+  }
+
+  .video-grid.grid-2 .video-wrapper {
+    width: 50%;
+  }
+
+  .video-wrapper {
+    position: relative;
+    margin-bottom: 8px;
+  }
+
+  .video-wrapper video {
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+    background-color: #333;
   }
 `;
 
@@ -157,6 +172,23 @@ const OutputPanel = ({
   );
 };
 
+// Function to get LiveKit token from the deployed server
+const getLiveKitToken = async (roomName, identity) => {
+  const response = await fetch(
+    `https://livekit-token-server-production.up.railway.app/get-token?roomName=${encodeURIComponent(
+      roomName
+    )}&identity=${encodeURIComponent(identity)}`
+  );
+  if (!response.ok) {
+    throw new Error("Failed to get token");
+  }
+  const data = await response.json();
+  if (!data.success || !data.token) {
+    throw new Error("Invalid token response");
+  }
+  return data.token;
+};
+
 const CodingEnvi = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -196,8 +228,12 @@ const CodingEnvi = () => {
   const [activeEditors, setActiveEditors] = useState(new Set());
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
-  const [fetchTime, setFetchTime] = useState(null); // Added for OutputPanel
-  const [complexity, setComplexity] = useState(null); // Added for OutputPanel
+  const [fetchTime, setFetchTime] = useState(null);
+  const [complexity, setComplexity] = useState(null);
+  const [room, setRoom] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState("disconnected");
+  const [videoStreams, setVideoStreams] = useState({});
+  const [layout, setLayout] = useState("grid-1");
 
   const pinnedVideoRef = useRef(null);
   const editorRef = useRef(null);
@@ -263,16 +299,118 @@ const CodingEnvi = () => {
       }));
       setChatMessages(messages);
 
-      // Ensure DOM updates before scrolling
       setTimeout(() => {
         if (chatScrollRef.current) {
           chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
         }
-      }, 100); // 100ms delay
+      }, 100);
     });
 
     return () => unsubscribe();
   }, [sessionId]);
+
+  // LiveKit Room Setup
+  useEffect(() => {
+    const joinRoom = async () => {
+      if (!auth.currentUser) return;
+      try {
+        setConnectionStatus("connecting");
+        const token = await getLiveKitToken(sessionId, auth.currentUser.uid);
+        const room = new LivekitClient.Room({
+          adaptiveStream: true,
+          dynacast: true,
+          videoCaptureDefaults: {
+            resolution: LivekitClient.VideoPresets.h720.resolution,
+          },
+        });
+        await room.connect(
+          "wss://video-chat-application-7u5wc7ae.livekit.cloud",
+          token
+        );
+        setRoom(room);
+        setConnectionStatus("connected");
+        await room.localParticipant.enableCameraAndMicrophone();
+      } catch (error) {
+        console.error("Failed to join room:", error);
+        setConnectionStatus("disconnected");
+      }
+    };
+    joinRoom();
+
+    return () => {
+      if (room) {
+        room.disconnect();
+      }
+    };
+  }, [sessionId]);
+
+  // LiveKit Track Event Listeners
+  useEffect(() => {
+    if (!room) return;
+
+    const handleTrackSubscribed = (track, publication, participant) => {
+      if (track.kind === "video") {
+        setVideoStreams((prev) => ({
+          ...prev,
+          [track.sid]: track.mediaStream,
+        }));
+      }
+    };
+
+    const handleTrackUnsubscribed = (track) => {
+      if (track.kind === "video") {
+        setVideoStreams((prev) => {
+          const newStreams = { ...prev };
+          delete newStreams[track.sid];
+          if (pinnedVideo === track.sid) setPinnedVideo(null);
+          return newStreams;
+        });
+      }
+    };
+
+    const handleLocalTrackPublished = (publication) => {
+      if (publication.track.kind === "video") {
+        setVideoStreams((prev) => ({
+          ...prev,
+          [publication.trackSid]: publication.track.mediaStream,
+        }));
+      }
+    };
+
+    const handleLocalTrackUnpublished = (publication) => {
+      if (publication.track.kind === "video") {
+        setVideoStreams((prev) => {
+          const newStreams = { ...prev };
+          delete newStreams[publication.trackSid];
+          if (pinnedVideo === publication.trackSid) setPinnedVideo(null);
+          return newStreams;
+        });
+      }
+    };
+
+    room.on("trackSubscribed", handleTrackSubscribed);
+    room.on("trackUnsubscribed", handleTrackUnsubscribed);
+    room.on("localTrackPublished", handleLocalTrackPublished);
+    room.on("localTrackUnpublished", handleLocalTrackUnpublished);
+
+    return () => {
+      room.off("trackSubscribed", handleTrackSubscribed);
+      room.off("trackUnsubscribed", handleTrackUnsubscribed);
+      room.off("localTrackPublished", handleLocalTrackPublished);
+      room.off("localTrackUnpublished", handleLocalTrackUnpublished);
+    };
+  }, [room, pinnedVideo]);
+
+  // Map LiveKit Participants
+  const livekitParticipants = useMemo(() => {
+    if (!room) return {};
+    const participants = {};
+    participants[room.localParticipant.identity] = room.localParticipant;
+    room.participants.forEach((p) => {
+      participants[p.identity] = p;
+    });
+    return participants;
+  }, [room]);
 
   // Yjs Initialization
   const initializeYjs = (language) => {
@@ -427,8 +565,8 @@ const CodingEnvi = () => {
       setIsLoading(true);
       setError(null);
       setCodeOutput(null);
-      setFetchTime(null); // Reset fetchTime
-      setComplexity(null); // Reset complexity
+      setFetchTime(null);
+      setComplexity(null);
 
       if (!editorRef.current || !editorRef.current.getValue().trim()) {
         throw new Error("No code to execute!");
@@ -446,8 +584,8 @@ const CodingEnvi = () => {
         result.status !== "Accepted" &&
         (!result.exitCode || result.exitCode !== 0);
       setCodeOutput(result);
-      setFetchTime((endTime - startTime).toFixed(2)); // Calculate fetch time in ms
-      setComplexity("O(n)"); // Placeholder complexity; replace with actual logic if available
+      setFetchTime((endTime - startTime).toFixed(2));
+      setComplexity("O(n)"); // Placeholder; replace with actual logic if available
     } catch (err) {
       setError(err);
     } finally {
@@ -742,7 +880,9 @@ const CodingEnvi = () => {
                 ).find(([_, s]) => s.user?.id === participant.uid);
                 const clientId = state ? state[0] : null;
                 const isActive = activeEditors.has(clientId);
-                const userColor = state ? state[1].user.color : "#888888";
+                const livekitParticipant = livekitParticipants[participant.uid];
+                const micOn = livekitParticipant?.isMicrophoneEnabled;
+                const videoOn = livekitParticipant?.isCameraEnabled;
                 const displayName = participant.username || "Anonymous";
                 return (
                   <div
@@ -772,7 +912,7 @@ const CodingEnvi = () => {
                       </Avatar>
                       {leftSidebarOpen && (
                         <div className="absolute -bottom-1 -right-1 flex gap-1">
-                          {participant.micOn && (
+                          {micOn && (
                             <Badge
                               variant="secondary"
                               className="h-5 w-5 p-0 flex items-center justify-center"
@@ -780,7 +920,7 @@ const CodingEnvi = () => {
                               <Mic className="h-3 w-3" />
                             </Badge>
                           )}
-                          {participant.videoOn && (
+                          {videoOn && (
                             <Badge
                               variant="secondary"
                               className="h-5 w-5 p-0 flex items-center justify-center"
@@ -1142,29 +1282,42 @@ const CodingEnvi = () => {
               value="video"
               className="flex-1 overflow-hidden p-0 m-0"
             >
+              <div className="p-2 border-b">
+                <Select value={layout} onValueChange={setLayout}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select layout" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="grid-1">1 per row</SelectItem>
+                    <SelectItem value="grid-2">2 per row</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <ScrollArea className="h-full p-2">
-                {participants
-                  .filter((p) => p.videoOn || p.isActive)
-                  .map((participant) => (
-                    <div
-                      key={participant.uid}
-                      className="relative rounded-md bg-muted w-full mb-2"
-                    >
+                <div className={`video-grid ${layout}`}>
+                  {Object.entries(videoStreams).map(([sid, stream]) => (
+                    <div key={sid} className="video-wrapper">
+                      <video
+                        srcObject={stream}
+                        autoPlay
+                        playsInline
+                        muted={sid.includes(auth.currentUser?.uid)} // Mute local video
+                      />
                       <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
-                        {participant.username}
+                        {sid.includes(auth.currentUser?.uid)
+                          ? "You"
+                          : participants.find((p) =>
+                              sid.includes(p.uid)
+                            )?.username || "Unknown"}
                       </div>
                       <div className="absolute top-2 right-2 flex gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6 bg-background/80 hover:bg-background"
-                          onClick={() => {
-                            if (pinnedVideo === participant.uid) {
-                              setPinnedVideo(null);
-                            } else {
-                              setPinnedVideo(participant.uid);
-                            }
-                          }}
+                          onClick={() =>
+                            setPinnedVideo(pinnedVideo === sid ? null : sid)
+                          }
                         >
                           <PinIcon
                             className={`h-3 w-3 ${
@@ -1173,23 +1326,9 @@ const CodingEnvi = () => {
                           />
                         </Button>
                       </div>
-                      <div className="w-full aspect-video flex items-center justify-center">
-                        {participant.videoOn ? (
-                          <img
-                            src={participant.avatar || "/placeholder.svg"}
-                            alt={participant.username}
-                            className="w-full h-full object-cover rounded-md"
-                          />
-                        ) : (
-                          <Avatar className="h-12 w-12">
-                            <AvatarFallback>
-                              {participant.username.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
-                      </div>
                     </div>
                   ))}
+                </div>
               </ScrollArea>
             </TabsContent>
 
@@ -1238,7 +1377,7 @@ const CodingEnvi = () => {
                             let hours = date.getHours();
                             const minutes = date.getMinutes();
                             const ampm = hours >= 12 ? "PM" : "AM";
-                            hours = hours % 12 || 12; // Convert 0 to 12
+                            hours = hours % 12 || 12;
                             const paddedMinutes = minutes
                               .toString()
                               .padStart(2, "0");
@@ -1298,7 +1437,12 @@ const CodingEnvi = () => {
               micEnabled ? "gray-100" : "gray-800"
             } bg-${micEnabled ? "white" : "black"}`}
             size="icon"
-            onClick={() => setMicEnabled(!micEnabled)}
+            onClick={async () => {
+              if (room) {
+                await room.localParticipant.setMicrophoneEnabled(!micEnabled);
+                setMicEnabled(!micEnabled);
+              }
+            }}
           >
             {micEnabled ? (
               <Mic
@@ -1321,7 +1465,12 @@ const CodingEnvi = () => {
             className={`rounded-full border border-gray-400 hover:bg-${
               videoEnabled ? "gray-100" : "gray-800"
             } bg-${videoEnabled ? "white" : "black"}`}
-            onClick={() => setVideoEnabled(!videoEnabled)}
+            onClick={async () => {
+              if (room) {
+                await room.localParticipant.setCameraEnabled(!videoEnabled);
+                setVideoEnabled(!videoEnabled);
+              }
+            }}
           >
             {videoEnabled ? (
               <Video
@@ -1342,6 +1491,12 @@ const CodingEnvi = () => {
             variant="destructive"
             size="sm"
             className="rounded-lg bg-red-700 text-white hover:bg-red-600"
+            onClick={() => {
+              if (room) {
+                room.disconnect();
+              }
+              navigate("/"); // Adjust navigation as needed
+            }}
           >
             <LogOut className="h-4 w-4 mr-2" />
             Leave Session
@@ -1350,7 +1505,7 @@ const CodingEnvi = () => {
       </div>
 
       {/* Pinned Video */}
-      {pinnedVideo !== null && (
+      {pinnedVideo && videoStreams[pinnedVideo] && (
         <div
           ref={pinnedVideoRef}
           className="absolute z-50 rounded-md bg-background border shadow-lg"
@@ -1362,44 +1517,27 @@ const CodingEnvi = () => {
           }}
           onMouseDown={handleMouseDown}
         >
-          <div className="absolute top-2 right-2 flex gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 bg-background/80 hover:bg-background"
-              onClick={() => setPinnedVideo(null)}
-            >
-              <X className="h-3 w-3" />
-            </Button>
+          <video
+            srcObject={videoStreams[pinnedVideo]}
+            autoPlay
+            playsInline
+            muted={pinnedVideo.includes(auth.currentUser?.uid)}
+            className="w-full h-full object-cover rounded-md"
+          />
+          <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
+            {pinnedVideo.includes(auth.currentUser?.uid)
+              ? "You"
+              : participants.find((p) => pinnedVideo.includes(p.uid))
+                  ?.username || "Unknown"}
           </div>
-
-          {participants
-            .filter((p) => p.uid === pinnedVideo)
-            .map((participant) => (
-              <div
-                key={participant.uid}
-                className="h-full flex items-center justify-center"
-              >
-                {participant.videoOn ? (
-                  <img
-                    src={participant.avatar || "/placeholder.svg"}
-                    alt={participant.username}
-                    className="w-full h-full object-cover rounded-md"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center">
-                    <Avatar className="h-16 w-16">
-                      <AvatarFallback>
-                        {participant.username.charAt(0)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="mt-2 text-sm font-medium">
-                      {participant.username}
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 h-6 w-6 bg-background/80 hover:bg-background"
+            onClick={() => setPinnedVideo(null)}
+          >
+            <X className="h-3 w-3" />
+          </Button>
         </div>
       )}
     </div>
