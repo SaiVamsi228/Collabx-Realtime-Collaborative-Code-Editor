@@ -207,7 +207,7 @@ const CodingEnvi = () => {
 
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
-    const wsUrl = `wss.//web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
+    const wsUrl = `wss://web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
     console.log(`Connecting to WebSocket: ${wsUrl}`);
 
     const yDoc = new Y.Doc();
