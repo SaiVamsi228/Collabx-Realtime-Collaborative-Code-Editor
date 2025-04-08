@@ -117,9 +117,7 @@ const CodingEnvi = () => {
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
   const [previousLanguage, setPreviousLanguage] = useState(initialLanguage);
-  const [code, setCode] = useState(
-    "// Write your code here\nconsole.log('Hello, world!');\n"
-  );
+  const [codeOutput, setCodeOutput] = useState(null);
   const [pinnedVideo, setPinnedVideo] = useState(null);
   const [pinnedVideoPosition, setPinnedVideoPosition] = useState({
     x: 20,
@@ -130,14 +128,12 @@ const CodingEnvi = () => {
   const [showRunWithInput, setShowRunWithInput] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [codeOutput, setCodeOutput] = useState(null);
   const [error, setError] = useState(null);
   const { theme, setTheme } = useTheme();
   const [fontSize, setFontSize] = useState(14);
   const [tabSize, setTabSize] = useState(2);
   const [monacoTheme, setMonacoTheme] = useState("vs-dark");
   const [isEditorReady, setIsEditorReady] = useState(false);
-  const [activeCollapsible, setActiveCollapsible] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(undefined);
   const [participants, setParticipants] = useState([]);
   const [activeEditors, setActiveEditors] = useState(new Set());
@@ -148,8 +144,6 @@ const CodingEnvi = () => {
   const yDocRef = useRef(null);
   const providerRef = useRef(null);
   const bindingRef = useRef(null);
-  const fetchCardRef = useRef(null);
-  const complexityCardRef = useRef(null);
   const editTimeouts = useRef(new Map());
 
   const languages = [
@@ -193,38 +187,38 @@ const CodingEnvi = () => {
     return () => unsubscribe();
   }, [sessionId]);
 
-  // WebSocket and Yjs Initialization (from old code)
+  // Yjs Initialization
   const initializeYjs = (language) => {
     if (!editorRef.current || !monacoRef.current) {
       console.log("Cannot initialize Yjs: missing editor or Monaco instance");
       return;
     }
-  
+
     console.log("Initializing Yjs for language:", language);
     if (bindingRef.current) bindingRef.current.destroy();
     if (providerRef.current) providerRef.current.destroy();
     if (yDocRef.current) yDocRef.current.destroy();
-  
+
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
     const wsUrl = `wss://web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
     console.log(`Connecting to WebSocket: ${wsUrl}`);
 
     const yDoc = new Y.Doc();
-    currentYDocRef.current = yDoc;
+    yDocRef.current = yDoc;
 
     providerRef.current = new WebsocketProvider(wsUrl, fullSessionId, yDoc, {
       resyncInterval: 2000,
     });
-  
+
     providerRef.current.on("status", (event) => {
       console.log(`WebSocket ${fullSessionId} status: ${event.status}`);
     });
-  
+
     providerRef.current.on("connection-error", (err) => {
       console.error(`WebSocket ${fullSessionId} error:`, err);
     });
-  
+
     const yText = yDoc.getText("monaco");
     bindingRef.current = new MonacoBinding(
       yText,
@@ -232,7 +226,7 @@ const CodingEnvi = () => {
       new Set([editorRef.current]),
       providerRef.current.awareness
     );
-  
+
     yText.observe((event) => {
       const transaction = event.transaction;
       let editingClientId = transaction.local
@@ -242,7 +236,7 @@ const CodingEnvi = () => {
               !transaction.beforeState.has(clientId) ||
               transaction.beforeState.get(clientId) < clock
           )?.[0];
-  
+
       if (editingClientId) {
         console.log("Edit from client:", editingClientId);
         setActiveEditors((prev) => new Set(prev).add(editingClientId));
@@ -260,7 +254,7 @@ const CodingEnvi = () => {
         editTimeouts.current.set(editingClientId, timeoutId);
       }
     });
-  
+
     const editor = editorRef.current;
     const awareness = providerRef.current.awareness;
     const localColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
@@ -271,19 +265,19 @@ const CodingEnvi = () => {
       color: localColor,
       id: auth.currentUser?.uid,
     });
-  
+
     const updateCursorPosition = (position) => {
       awareness.setLocalStateField("cursor", {
         line: position.lineNumber,
         column: position.column,
       });
     };
-  
+
     editor.onDidChangeCursorPosition((e) => updateCursorPosition(e.position));
     editor.onDidChangeCursorSelection((e) =>
       updateCursorPosition(e.selection.getPosition())
     );
-  
+
     console.log(`Initialized Yjs for session: ${fullSessionId}`);
   };
 
@@ -291,15 +285,13 @@ const CodingEnvi = () => {
     editorRef.current = editor;
     monacoRef.current = monaco;
     setIsEditorReady(true);
-    initializeYjs(selectedLanguage);
   };
 
+  // Main Yjs Effect
   useEffect(() => {
-    setMonacoTheme(theme === "dark" ? "vs-dark" : "light");
-  }, [theme]);
+    if (isEditorReady && editorRef.current && monacoRef.current) {
+      initializeYjs(selectedLanguage);
 
-  useEffect(() => {
-    if (isEditorReady) {
       const translatedCode = location.state?.translatedCode;
       const newLanguage = location.state?.targetLanguage;
 
@@ -310,7 +302,7 @@ const CodingEnvi = () => {
           editorRef.current.getModel(),
           newLanguage
         );
-        initializeYjs(newLanguage); // Re-initialize Yjs for new language
+        initializeYjs(newLanguage);
         if (translatedCode === "" && editorRef.current) {
           editorRef.current.setValue("");
         }
@@ -334,6 +326,10 @@ const CodingEnvi = () => {
       editTimeouts.current.clear();
     };
   }, [isEditorReady, selectedLanguage, sessionId, location.state]);
+
+  useEffect(() => {
+    setMonacoTheme(theme === "dark" ? "vs-dark" : "light");
+  }, [theme]);
 
   const handleRunCode = async (stdin = "") => {
     try {
@@ -415,43 +411,6 @@ const CodingEnvi = () => {
     };
   }, [isResizing]);
 
-  useEffect(() => {
-    const handleGlobalMouseUp = () => setIsDragging(false);
-    const handleGlobalMouseMove = (e) => {
-      if (isDragging && pinnedVideoRef.current) {
-        const newX = e.clientX - dragOffset.x;
-        const newY = e.clientY - dragOffset.y;
-        setPinnedVideoPosition({ x: newX, y: newY });
-      }
-    };
-    const handleGlobalClick = (e) => {
-      if (
-        activeCollapsible &&
-        fetchCardRef.current &&
-        complexityCardRef.current &&
-        !fetchCardRef.current.contains(e.target) &&
-        !complexityCardRef.current.contains(e.target) &&
-        !e.target.closest("button")
-      ) {
-        setActiveCollapsible(null);
-      }
-    };
-
-    window.addEventListener("mouseup", handleGlobalMouseUp);
-    window.addEventListener("mousemove", handleGlobalMouseMove);
-    window.addEventListener("click", handleGlobalClick);
-
-    return () => {
-      window.removeEventListener("mouseup", handleGlobalMouseUp);
-      window.removeEventListener("mousemove", handleGlobalMouseMove);
-      window.removeEventListener("click", handleGlobalClick);
-    };
-  }, [isDragging, dragOffset, activeCollapsible]);
-
-  const toggleCollapsible = (type) => {
-    setActiveCollapsible(activeCollapsible === type ? null : type);
-  };
-
   if (isAuthenticated === undefined) {
     return <div>Loading...</div>;
   }
@@ -480,8 +439,8 @@ const CodingEnvi = () => {
             <Users className={`w-5 h-5 bg-transparent`} />
           </Button>
           <div className="w-[215px] h-[50px] flex items-center justify-center bg-transparent">
-            {/* Placeholder for SVG */}
-            <div className="svg-placeholder">Logo SVG Placeholder</div>
+            {/* No SVG as requested */}
+            <span>CollabX - Session: {sessionId}</span>
           </div>
         </div>
 
@@ -545,87 +504,6 @@ const CodingEnvi = () => {
               <TooltipContent>Run with custom input</TooltipContent>
             </Tooltip>
           </TooltipProvider>
-
-          <div className="relative">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={`rounded-lg bg-transparent ${
-                      theme === "light"
-                        ? "hover:bg-gray-100 text-black"
-                        : "hover:bg-gray-800 text-white"
-                    } border border-gray-11`}
-                    onClick={() => toggleCollapsible("translate")}
-                  >
-                    <Languages className="h-4 w-4 mr-2" />
-                    Translate
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Translate code</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            <Collapsible open={activeCollapsible === "translate"}>
-              <CollapsibleContent className="absolute top-10 left-0 z-10">
-                <Card
-                  className={`${
-                    theme === "dark"
-                      ? "bg-gray-800 text-white"
-                      : "bg-white text-black"
-                  } border`}
-                >
-                  <CardHeader className="py-2">
-                    <CardTitle className="text-sm">Code Translation</CardTitle>
-                  </CardHeader>
-                  <CardContent className="py-2">
-                    <Select defaultValue="python">
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Translate To" />
-                      </SelectTrigger>
-                      <SelectContent
-                        className={
-                          theme === "dark" ? "bg-gray-800" : "bg-white"
-                        }
-                      >
-                        <SelectItem
-                          value="python"
-                          className={`cursor-pointer text-white ${
-                            theme === "dark"
-                              ? "hover:bg-gray-600"
-                              : "hover:bg-gray-200 text-black"
-                          }`}
-                        >
-                          Python
-                        </SelectItem>
-                        <SelectItem
-                          value="java"
-                          className={`cursor-pointer text-white ${
-                            theme === "dark"
-                              ? "hover:bg-gray-600"
-                              : "hover:bg-gray-200 text-black"
-                          }`}
-                        >
-                          Java
-                        </SelectItem>
-                        <SelectItem
-                          value="csharp"
-                          className={`cursor-pointer text-white ${
-                            theme === "dark"
-                              ? "hover:bg-gray-600"
-                              : "hover:bg-gray-200 text-black"
-                          }`}
-                        >
-                          C#
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </CardContent>
-                </Card>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
 
           <TooltipProvider>
             <Tooltip>
@@ -735,6 +613,8 @@ const CodingEnvi = () => {
         <div
           className={`border-r transition-all duration-300 ${
             leftSidebarOpen ? "w-64" : "w-16"
+ 
+   
           }`}
         >
           <div className="h-full flex flex-col">
@@ -745,15 +625,11 @@ const CodingEnvi = () => {
             </div>
             <div className="flex-1 overflow-auto p-2">
               {participants.map((participant) => {
-                console.log(providerRef.current?.awareness.getStates());
                 const state = Array.from(
                   providerRef.current?.awareness.getStates() || []
                 ).find(([_, s]) => s.user?.id === participant.id);
                 const clientId = state ? state[0] : null;
                 const isActive = activeEditors.has(clientId);
-                if (clientId && !isActive) {
-                  activeEditors.add(clientId);
-                }
                 const userColor = state ? state[1].user.color : "#888888";
                 const displayName = participant.username || "Anonymous";
                 return (
@@ -826,7 +702,6 @@ const CodingEnvi = () => {
                 height="100%"
                 language={selectedLanguage}
                 theme={monacoTheme}
-                value={code}
                 onMount={handleEditorDidMount}
                 options={{
                   minimap: { enabled: true },
@@ -930,16 +805,6 @@ const CodingEnvi = () => {
                             }`}
                           >
                             Dark
-                          </SelectItem>
-                          <SelectItem
-                            value="system"
-                            className={`cursor-pointer text-white ${
-                              theme === "dark"
-                                ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
-                            }`}
-                          >
-                            System
                           </SelectItem>
                         </SelectContent>
                       </Select>
@@ -1051,60 +916,6 @@ const CodingEnvi = () => {
                     </div>
                   </div>
                 </div>
-
-                <div>
-                  <h3 className="text-lg font-medium mb-2">
-                    Collaboration Settings
-                  </h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Auto-save</span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={`rounded-lg bg-transparent ${
-                          theme === "light"
-                            ? "hover:bg-gray-100 text-black"
-                            : "hover:bg-gray-800 text-white"
-                        } border border-gray-11`}
-                      >
-                        Enabled
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">
-                        Show cursor names
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={`rounded-lg bg-transparent ${
-                          theme === "light"
-                            ? "hover:bg-gray-100 text-black"
-                            : "hover:bg-gray-800 text-white"
-                        } border border-gray-11`}
-                      >
-                        Enabled
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Notifications</span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={`rounded-lg bg-transparent ${
-                          theme === "light"
-                            ? "hover:bg-gray-100 text-black"
-                            : "hover:bg-gray-800 text-white"
-                        } border border-gray-11`}
-                      >
-                        Enabled
-                      </Button>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -1142,62 +953,6 @@ const CodingEnvi = () => {
                     </Button>
                   </div>
                 </div>
-
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Changes</h3>
-                  <div className="space-y-2">
-                    <div className="p-2 border rounded-md">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">app.js</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        2 additions, 1 deletion
-                      </p>
-                    </div>
-
-                    <div className="p-2 border rounded-md">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">styles.css</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        5 additions, 0 deletions
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Commit History</h3>
-                  <div className="space-y-2">
-                    <div className="p-2 border rounded-md">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">
-                          Fix authentication bug
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          2 hours ago
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        John Doe
-                      </p>
-                    </div>
-
-                    <div className="p-2 border rounded-md">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">
-                          Add user profile page
-                        </span>
-                        <span className="text-sm text-muted-foreground">
-                          Yesterday
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Jane Smith
-                      </p>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -1226,11 +981,8 @@ const CodingEnvi = () => {
                       <ScrollArea className="p-4 h-[calc(100%-45px)] overflow-auto font-mono text-sm">
                         <Textarea
                           className="w-full h-full resize-none"
-                          placeholder="Add your notes here... (Persisted in real-time via Yjs)"
+                          placeholder="Add your notes here..."
                         />
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Notes and code are autosaved in real-time using Yjs.
-                        </p>
                       </ScrollArea>
                     </TabsContent>
                     <TabsContent value="output" className="m-0">
@@ -1242,108 +994,6 @@ const CodingEnvi = () => {
                       />
                     </TabsContent>
                   </Tabs>
-                </div>
-
-                <div className="flex items-center gap-2 z-10">
-                  <div className="relative">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={`rounded-lg bg-transparent ${
-                        theme === "light"
-                          ? "hover:bg-gray-100 text-black"
-                          : "hover:bg-gray-800 text-white"
-                      } border border-gray-11`}
-                      onClick={() => toggleCollapsible("fetch")}
-                    >
-                      <Clock className="h-4 w-4 mr-2" />
-                      Fetch Time
-                    </Button>
-                    <Collapsible open={activeCollapsible === "fetch"}>
-                      <CollapsibleContent className="absolute top-10 right-0 z-10">
-                        <Card
-                          ref={fetchCardRef}
-                          className={`w-72 ${
-                            theme === "dark"
-                              ? "bg-gray-800 text-white"
-                              : "bg-white text-black"
-                          } border`}
-                        >
-                          <CardHeader className="py-2">
-                            <CardTitle className="text-sm">
-                              Performance Metrics
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="py-2">
-                            <div className="text-xs space-y-1">
-                              <div className="flex justify-between">
-                                <span>Fetch Time:</span>
-                                <span>
-                                  {codeOutput?.executionTime
-                                    ? `${codeOutput.executionTime}s`
-                                    : "N/A"}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Memory:</span>
-                                <span>
-                                  {codeOutput?.memory
-                                    ? `${codeOutput.memory} KB`
-                                    : "N/A"}
-                                </span>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
-
-                  <div className="relative">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={`rounded-lg bg-transparent ${
-                        theme === "light"
-                          ? "hover:bg-gray-100 text-black"
-                          : "hover:bg-gray-800 text-white"
-                      } border border-gray-11`}
-                      onClick={() => toggleCollapsible("complexity")}
-                    >
-                      <Cpu className="h-4 w-4 mr-2" />
-                      Complexity
-                    </Button>
-                    <Collapsible open={activeCollapsible === "complexity"}>
-                      <CollapsibleContent className="absolute top-10 right-0 z-10">
-                        <Card
-                          ref={complexityCardRef}
-                          className={`w-72 ${
-                            theme === "dark"
-                              ? "bg-gray-800 text-white"
-                              : "bg-white text-black"
-                          } border`}
-                        >
-                          <CardHeader className="py-2">
-                            <CardTitle className="text-sm">
-                              Complexity Analysis
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="py-2">
-                            <div className="text-xs space-y-1">
-                              <div className="flex justify-between">
-                                <span>Time Complexity:</span>
-                                <span>O(n)</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span>Space Complexity:</span>
-                                <span>O(1)</span>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
                 </div>
               </div>
             </div>
@@ -1385,7 +1035,7 @@ const CodingEnvi = () => {
                       className="relative rounded-md bg-muted w-full mb-2"
                     >
                       <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
-                        {participant.name}
+                        {participant.username}
                       </div>
                       <div className="absolute top-2 right-2 flex gap-1">
                         <Button
@@ -1411,13 +1061,13 @@ const CodingEnvi = () => {
                         {participant.videoOn ? (
                           <img
                             src={participant.avatar || "/placeholder.svg"}
-                            alt={participant.name}
+                            alt={participant.username}
                             className="w-full h-full object-cover rounded-md"
                           />
                         ) : (
                           <Avatar className="h-12 w-12">
                             <AvatarFallback>
-                              {participant.name.charAt(0)}
+                              {participant.username.charAt(0)}
                             </AvatarFallback>
                           </Avatar>
                         )}
@@ -1545,18 +1195,18 @@ const CodingEnvi = () => {
                 {participant.videoOn ? (
                   <img
                     src={participant.avatar || "/placeholder.svg"}
-                    alt={participant.name}
+                    alt={participant.username}
                     className="w-full h-full object-cover rounded-md"
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center">
                     <Avatar className="h-16 w-16">
                       <AvatarFallback>
-                        {participant.name.charAt(0)}
+                        {participant.username.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                     <span className="mt-2 text-sm font-medium">
-                      {participant.name}
+                      {participant.username}
                     </span>
                   </div>
                 )}
