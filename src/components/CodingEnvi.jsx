@@ -173,26 +173,16 @@ const OutputPanel = ({
 };
 
 // Function to get LiveKit token from the deployed server
-const getLiveKitToken = async (roomName, identity) => {
-  const apiKey = "APIuNjuFLnWmpeU"; // Replace with your actual API key
-  const apiSecret = "iDAvIJxwmAAnSs5fJG7OXxWjhPaPzDdeQxXEWAo8QYf"; // Replace with your actual API secret
+// Function to get LiveKit token from the deployed server
+const getLiveKitToken = async (roomName, participantName) => {
   const response = await fetch(
     `https://livekit-token-server-production.up.railway.app/get-token?roomName=${encodeURIComponent(
       roomName
-    )}&identity=${encodeURIComponent(
-      identity
-    )}&apiKey=${encodeURIComponent(apiKey)}&apiSecret=${encodeURIComponent(
-      apiSecret
-    )}`,
-    {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    }
+    )}&participantName=${encodeURIComponent(participantName)}`
   );
   if (!response.ok) {
     const errorText = await response.text();
+    console.error(`Token request failed: ${response.status} - ${errorText}`);
     throw new Error(`Failed to get token: ${response.status} - ${errorText}`);
   }
   const data = await response.json();
@@ -201,6 +191,41 @@ const getLiveKitToken = async (roomName, identity) => {
   }
   return data.token;
 };
+
+// LiveKit Room Setup
+useEffect(() => {
+  const joinRoom = async () => {
+    if (!auth.currentUser) return;
+    try {
+      setConnectionStatus("connecting");
+      const token = await getLiveKitToken(sessionId, auth.currentUser.uid);
+      const room = new LivekitClient.Room({
+        adaptiveStream: true,
+        dynacast: true,
+        videoCaptureDefaults: {
+          resolution: LivekitClient.VideoPresets.h720.resolution,
+        },
+      });
+      await room.connect(
+        "wss://video-chat-application-7u5wc7ae.livekit.cloud",
+        token
+      );
+      setRoom(room);
+      setConnectionStatus("connected");
+      await room.localParticipant.enableCameraAndMicrophone();
+    } catch (error) {
+      console.error("Failed to join room:", error);
+      setConnectionStatus("disconnected");
+    }
+  };
+  joinRoom();
+
+  return () => {
+    if (room) {
+      room.disconnect();
+    }
+  };
+}, [sessionId]);
 
 const CodingEnvi = () => {
   const { sessionId } = useParams();
