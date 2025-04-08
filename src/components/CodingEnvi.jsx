@@ -51,7 +51,14 @@ import { WebsocketProvider } from "y-websocket";
 import { MonacoBinding } from "y-monaco";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { auth, db } from "../firebase";
-import { doc, onSnapshot, collection, addDoc, query, orderBy } from "firebase/firestore";
+import {
+  doc,
+  onSnapshot,
+  collection,
+  addDoc,
+  query,
+  orderBy,
+} from "firebase/firestore";
 
 // Add this CSS to your `CodingEnvi.css` file
 const styles = `
@@ -225,6 +232,7 @@ const CodingEnvi = () => {
   }, [sessionId]);
 
   // Firebase Chat Listener
+  // Firebase Chat Listener
   useEffect(() => {
     if (!auth.currentUser) return;
 
@@ -237,9 +245,16 @@ const CodingEnvi = () => {
         ...doc.data(),
       }));
       setChatMessages(messages);
-      if (chatScrollRef.current) {
-        chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-      }
+
+      // Use setTimeout to ensure DOM is updated before scrolling
+      setTimeout(() => {
+        if (chatScrollRef.current) {
+          chatScrollRef.current.scrollTo({
+            top: chatScrollRef.current.scrollHeight,
+            behavior: "smooth", // Smooth scrolling for better UX
+          });
+        }
+      }, 0); // Delay of 0ms ensures it runs after the render
     });
 
     return () => unsubscribe();
@@ -321,7 +336,8 @@ const CodingEnvi = () => {
     const awareness = providerRef.current.awareness;
     const localColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
     const localName =
-      auth.currentUser?.displayName || "User" + Math.floor(Math.random() * 1000);
+      auth.currentUser?.displayName ||
+      "User" + Math.floor(Math.random() * 1000);
     awareness.setLocalStateField("user", {
       name: localName,
       color: localColor,
@@ -1155,33 +1171,61 @@ const CodingEnvi = () => {
               </ScrollArea>
             </TabsContent>
 
-            <TabsContent value="chat" className="flex-1 overflow-hidden p-0 m-0 flex flex-col">
+            <TabsContent
+              value="chat"
+              className="flex-1 overflow-hidden p-0 m-0 flex flex-col"
+            >
               <ScrollArea className="flex-1 p-2" ref={chatScrollRef}>
                 {chatMessages.map((message) => {
-                  const sender = participants.find((p) => p.uid === message.senderId);
-                  const isCurrentUser = message.senderId === auth.currentUser?.uid;
+                  const sender = participants.find(
+                    (p) => p.uid === message.senderId
+                  );
+                  const isCurrentUser =
+                    message.senderId === auth.currentUser?.uid;
                   return (
                     <div
                       key={message.id}
-                      className={`flex items-start gap-2 mb-2 ${isCurrentUser ? "justify-end" : "justify-start"}`}
+                      className={`flex items-start gap-2 mb-2 ${
+                        isCurrentUser ? "justify-end" : "justify-start"
+                      }`}
                     >
                       {!isCurrentUser && (
                         <Avatar className="h-6 w-6">
                           <AvatarImage src={sender?.avatar} />
-                          <AvatarFallback>{message.senderName.charAt(0).toUpperCase()}</AvatarFallback>
+                          <AvatarFallback>
+                            {message.senderName.charAt(0).toUpperCase()}
+                          </AvatarFallback>
                         </Avatar>
                       )}
                       <div
-                        className={`max-w-[70%] p-2 rounded-lg ${isCurrentUser ? "bg-blue-950 text-white" : "bg-gray-200 text-black"}`}
+                        className={`max-w-[70%] p-2 rounded-lg ${
+                          isCurrentUser
+                            ? "bg-blue-950 text-white"
+                            : "bg-gray-200 text-black"
+                        }`}
                       >
-                        {!isCurrentUser && <span className="text-xs font-semibold block">{message.senderName}</span>}
+                        {!isCurrentUser && (
+                          <span className="text-xs font-semibold block">
+                            {message.senderName}
+                          </span>
+                        )}
                         <p className="text-sm">{message.text}</p>
-                        <span className="text-xs opacity-70">{new Date(message.timestamp).toLocaleTimeString()}</span>
+                        <span className="text-xs opacity-70">
+                          $
+                          <span className="text-xs opacity-70">
+  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+</span>
+
+                        </span>
                       </div>
                       {isCurrentUser && (
                         <Avatar className="h-6 w-6">
                           <AvatarImage src={auth.currentUser?.photoURL} />
-                          <AvatarFallback>{auth.currentUser?.displayName?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+                          <AvatarFallback>
+                            {auth.currentUser?.displayName
+                              ?.charAt(0)
+                              .toUpperCase() || "U"}
+                          </AvatarFallback>
                         </Avatar>
                       )}
                     </div>
