@@ -1172,7 +1172,7 @@ const CodingEnvi = () => {
                         </Avatar>
                       )}
                       <div
-                        className={`max-w-[70%] p-2 rounded-lg ${isCurrentUser ? "bg-green-600 text-white" : "bg-gray-200 text-black"}`}
+                        className={`max-w-[70%] p-2 rounded-lg ${isCurrentUser ? "bg-blue-950 text-white" : "bg-gray-200 text-black"}`}
                       >
                         {!isCurrentUser && <span className="text-xs font-semibold block">{message.senderName}</span>}
                         <p className="text-sm">{message.text}</p>
