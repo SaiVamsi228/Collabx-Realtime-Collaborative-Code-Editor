@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { defineTheme } from "monaco-themes"; // Import defineTheme from monaco-themes
-import NightOwl from "monaco-themes/themes/Night Owl.json"; // Import Night Owl theme data
+import { defineTheme } from "monaco-themes";
+import NightOwl from "monaco-themes/themes/Night Owl.json";
 import {
   Users,
   Play,
@@ -90,30 +90,28 @@ const styles = `
   }
 
   .video-grid {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 8px;
-  }
-
-  .video-grid.grid-1 .video-wrapper {
-    width: 100%;
-  }
-
-  .video-grid.grid-2 .video-wrapper {
-    width: calc(50% - 4px);
+    height: 100%;
   }
 
   .video-wrapper {
     position: relative;
-    flex-grow: 1;
+    padding-bottom: 56.25%;
+    height: 0;
   }
 
   .video-wrapper video {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
     border-radius: 4px;
     background-color: #333;
+    transform: scaleX(-1);
   }
 
   .right-sidebar-content {
@@ -216,8 +214,8 @@ const CodingEnvi = () => {
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [versionControlExpanded, setVersionControlExpanded] = useState(false);
   const [rightSidebarTab, setRightSidebarTab] = useState("video");
-  const [micEnabled, setMicEnabled] = useState(false); // Initially off
-  const [videoEnabled, setVideoEnabled] = useState(false); // Initially off
+  const [micEnabled, setMicEnabled] = useState(false);
+  const [videoEnabled, setVideoEnabled] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
   const [previousLanguage, setPreviousLanguage] = useState(initialLanguage);
   const [codeOutput, setCodeOutput] = useState(null);
@@ -307,14 +305,19 @@ const CodingEnvi = () => {
         ...doc.data(),
       }));
       setChatMessages(messages);
-      setTimeout(() => {
-        if (chatScrollRef.current) {
-          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-        }
-      }, 100);
     });
     return () => unsubscribe();
   }, [sessionId]);
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = chatScrollRef.current;
+      const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+      if (isNearBottom) {
+        chatScrollRef.current.scrollTop = scrollHeight;
+      }
+    }
+  }, [chatMessages]);
 
   useEffect(() => {
     const joinRoom = async () => {
@@ -330,7 +333,6 @@ const CodingEnvi = () => {
           },
         });
         
-        // Connect without enabling media initially
         await room.connect(
           "wss://video-chat-application-7u5wc7ae.livekit.cloud",
           token
@@ -339,7 +341,6 @@ const CodingEnvi = () => {
         setRoom(room);
         setConnectionStatus("connected");
         
-        // Set initial states to off
         await room.localParticipant.setMicrophoneEnabled(false);
         await room.localParticipant.setCameraEnabled(false);
       } catch (error) {
@@ -358,7 +359,6 @@ const CodingEnvi = () => {
   }, [sessionId]);
 
   const cleanupSession = () => {
-    // Clean up video streams
     setVideoStreams({});
     Object.keys(videoRefs.current).forEach((sid) => {
       if (videoRefs.current[sid]) {
@@ -366,11 +366,7 @@ const CodingEnvi = () => {
       }
     });
     videoRefs.current = {};
-    
-    // Clean up pinned video
     setPinnedVideo(null);
-    
-    // Clean up Yjs
     if (bindingRef.current) bindingRef.current.destroy();
     if (providerRef.current) providerRef.current.destroy();
     if (yDocRef.current) yDocRef.current.destroy();
@@ -389,9 +385,8 @@ const CodingEnvi = () => {
           return newStreams;
         });
       }
-      // Audio tracks are now available to all participants
       if (track.kind === "audio") {
-        track.attach(); // Ensure audio is attached for all participants
+        track.attach();
       }
     };
 
@@ -542,10 +537,7 @@ const CodingEnvi = () => {
     editorRef.current = editor;
     monacoRef.current = monaco;
     monaco.editor.defineTheme("night-owl", NightOwl);
-
-    // Set the initial theme based on the current theme state
     setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
-
     setIsEditorReady(true);
   };
 
@@ -589,12 +581,11 @@ const CodingEnvi = () => {
   }, [isEditorReady, selectedLanguage, sessionId]);
 
   useEffect(() => {
-    if (monacoRef.current){
+    if (monacoRef.current) {
       monacoRef.current.editor.setTheme(
         theme === "dark" ? "night-owl" : "light"
       );
     }
-
     setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
   }, [theme]);
 
@@ -620,7 +611,7 @@ const CodingEnvi = () => {
 
       result.isError =
         result.status !== "Accepted" &&
-        (!result.exitCode || result.exitCode !== 0);
+        (!result.exit  result.exitCode || result.exitCode !== 0);
       setCodeOutput(result);
       setFetchTime((endTime - startTime).toFixed(2));
       setComplexity("O(n)");
@@ -706,12 +697,10 @@ const CodingEnvi = () => {
     if (room && room.localParticipant) {
       try {
         if (!videoEnabled) {
-          // Request permission when turning on
           const permission = await navigator.mediaDevices.getUserMedia({
             video: true,
           });
-          permission.getTracks().forEach((track) => track.stop()); // Stop the temporary stream
-          
+          permission.getTracks().forEach((track) => track.stop());
           await room.localParticipant.setCameraEnabled(true);
           setVideoEnabled(true);
         } else {
@@ -821,8 +810,6 @@ const CodingEnvi = () => {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-
-
                   variant="outline"
                   className={`rounded-lg bg-transparent ${
                     theme === "light"
@@ -1393,7 +1380,7 @@ const CodingEnvi = () => {
 
             <TabsContent
               value="chat"
-              className="flex-1 overflow-hidden p-0 m-0 flex flex-col"
+              className="flex-1 p-0 m-0 flex flex-col right-sidebar-content"
             >
               <ScrollArea className="flex-1 p-2" ref={chatScrollRef}>
                 {chatMessages.map((message) => {
