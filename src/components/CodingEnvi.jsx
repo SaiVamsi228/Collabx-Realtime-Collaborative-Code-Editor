@@ -94,7 +94,6 @@ const styles = `
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 8px;
-    height: 100%;
     width: 100%;
   }
   
@@ -114,7 +113,6 @@ const styles = `
     object-fit: cover;
     border-radius: 4px;
     background-color: #333;
-    translate: scaleX(-1);
   }
 
   .right-sidebar-content {
@@ -125,10 +123,18 @@ const styles = `
   }
 
   .chat-container {
-    position: relative;
     flex: 1;
     display: flex;
     flex-direction: column;
+    height: 100%;
+  }
+
+  .chat-messages {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
   }
 
   .new-messages-indicator {
@@ -139,6 +145,7 @@ const styles = `
     justify-content: center;
     padding: 4px;
     pointer-events: none;
+    z-index: 10;
   }
 
   .new-messages-button {
@@ -151,6 +158,12 @@ const styles = `
     align-items: center;
     gap: 4px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+
+  .chat-input-container {
+    padding: 8px;
+    border-top: 1px solid #e5e7eb;
+    background: inherit;
   }
 `;
 
@@ -502,9 +515,7 @@ const CodingEnvi = () => {
   const initializeYjs = (language) => {
     if (!editorRef.current || !monacoRef.current) return;
 
-    if (bindingRef.current) bindingRef.current.destroy();
-    if (providerRef.current) providerRef.current.destroy();
-    if (yDocRef.current) yDocRef.current.destroy();
+    if (bindingRef.current) bindingRef.current.destroy Ascendant;
 
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
@@ -1232,7 +1243,7 @@ const CodingEnvi = () => {
                           </SelectItem>
                           <SelectItem
                             value="14"
-                            className={`cursor-pointer text-whiteTop Bar ${
+                            className={`cursor-pointer text-white ${
                               theme === "dark"
                                 ? "hover:bg-gray-600"
                                 : "hover:bg-gray-200 text-black"
@@ -1423,7 +1434,7 @@ const CodingEnvi = () => {
 
             <TabsContent
               value="video"
-              className="flex-1 overflow-auto p-0 m-0 right-sidebar-content"
+              className="flex-1 m-0 p-0 right-sidebar-content"
             >
               <div className="p-2 border-b">
                 <Select>
@@ -1436,7 +1447,7 @@ const CodingEnvi = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <ScrollArea className="flex-1 p-2">
+              <ScrollArea className="flex-1 p-2 h-[calc(100%-60px)]">
                 <div className="video-grid">
                   {Object.entries(videoStreams).map(([sid, stream]) => (
                     <div key={sid} className="video-wrapper">
@@ -1481,11 +1492,11 @@ const CodingEnvi = () => {
 
             <TabsContent
               value="chat"
-              className="flex-1 p-0 m-0 right-sidebar-content"
+              className="flex-1 m-0 p-0 right-sidebar-content"
             >
               <div className="chat-container" ref={chatContainerRef}>
                 <ScrollArea 
-                  className="flex-1 p-2" 
+                  className="chat-messages p-2" 
                   ref={chatScrollRef}
                   onScroll={handleChatScroll}
                 >
@@ -1505,7 +1516,7 @@ const CodingEnvi = () => {
                       >
                         {!isCurrentUser && (
                           <Avatar className="h-6 w-6">
-                            <AvatarImage src={sender?.avatar} />
+                            <AvatarImage src={sender?. avatar} />
                             <AvatarFallback>
                               {message.senderName.charAt(0).toUpperCase()}
                             </AvatarFallback>
@@ -1563,7 +1574,7 @@ const CodingEnvi = () => {
                     </button>
                   </div>
                 )}
-                <div className="p-2 border-t">
+                <div className="chat-input-container">
                   <div className="flex gap-2">
                     <Input
                       placeholder="Type a message..."
