@@ -307,13 +307,9 @@ const CodingEnvi = () => {
         ...doc.data(),
       }));
       setChatMessages(messages);
-      // Improved auto-scrolling logic
       setTimeout(() => {
-        const scrollArea = document.querySelector(
-          '.right-sidebar-content [data-radix-scroll-area-viewport]'
-        );
-        if (scrollArea) {
-          scrollArea.scrollTop = scrollArea.scrollHeight;
+        if (chatScrollRef.current) {
+          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
         }
       }, 100);
     });
@@ -1338,7 +1334,7 @@ const CodingEnvi = () => {
 
             <TabsContent
               value="video"
-              className="flex-1 overflow-auto p-0 m-0  flex-col"
+              className="flex-1 overflow-auto p-0 m-0 right-sidebar-content"
             >
               <div className="p-2 border-b">
                 <Select>
@@ -1351,7 +1347,7 @@ const CodingEnvi = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <ScrollArea className="flex-1 p-2">
+              <div className="p-2 flex-1 overflow-auto">
                 <div className="video-grid">
                   {Object.entries(videoStreams).map(([sid, stream]) => (
                     <div key={sid} className="video-wrapper">
@@ -1392,7 +1388,7 @@ const CodingEnvi = () => {
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             </TabsContent>
 
             <TabsContent
