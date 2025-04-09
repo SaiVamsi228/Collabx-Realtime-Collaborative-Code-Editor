@@ -611,7 +611,7 @@ const CodingEnvi = () => {
 
       result.isError =
         result.status !== "Accepted" &&
-        (!result.exit  result.exitCode || result.exitCode !== 0);
+        (!result.exit && result.exitCode || result.exitCode !== 0);
       setCodeOutput(result);
       setFetchTime((endTime - startTime).toFixed(2));
       setComplexity("O(n)");
