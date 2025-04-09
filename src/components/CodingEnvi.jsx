@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { defineTheme } from "monaco-themes";
-import NightOwl from "monaco-themes/themes/Night Owl.json";
+import { defineTheme } from "monaco-themes"; // Import defineTheme from monaco-themes
+import NightOwl from "monaco-themes/themes/Night Owl.json"; // Import Night Owl theme data
 import {
   Users,
   Play,
@@ -90,29 +90,26 @@ const styles = `
   }
 
   .video-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 8px;
-    height: 100%;
-  }
-
-  .video-wrapper {
-    position: relative;
-    padding-bottom: 56.25%;
-    height: 0;
-  }
-
-  .video-wrapper video {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 4px;
-    background-color: #333;
-    transform: scaleX(-1);
-  }
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  height: 100%; /* Ensure it takes the full height of its container */
+}
+.video-wrapper {
+  position: relative;
+  padding-bottom: 56.25%; /* 16:9 aspect ratio */
+  height: 0; /* Allows padding-bottom to control height */
+}
+.video-wrapper video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+  background-color: #333;
+}
 
   .right-sidebar-content {
     flex: 1;
@@ -214,8 +211,8 @@ const CodingEnvi = () => {
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [versionControlExpanded, setVersionControlExpanded] = useState(false);
   const [rightSidebarTab, setRightSidebarTab] = useState("video");
-  const [micEnabled, setMicEnabled] = useState(false);
-  const [videoEnabled, setVideoEnabled] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(false); // Initially off
+  const [videoEnabled, setVideoEnabled] = useState(false); // Initially off
   const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
   const [previousLanguage, setPreviousLanguage] = useState(initialLanguage);
   const [codeOutput, setCodeOutput] = useState(null);
@@ -305,19 +302,14 @@ const CodingEnvi = () => {
         ...doc.data(),
       }));
       setChatMessages(messages);
+      setTimeout(() => {
+        if (chatScrollRef.current) {
+          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        }
+      }, 100);
     });
     return () => unsubscribe();
   }, [sessionId]);
-
-  useEffect(() => {
-    if (chatScrollRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = chatScrollRef.current;
-      const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
-      if (isNearBottom) {
-        chatScrollRef.current.scrollTop = scrollHeight;
-      }
-    }
-  }, [chatMessages]);
 
   useEffect(() => {
     const joinRoom = async () => {
@@ -332,15 +324,17 @@ const CodingEnvi = () => {
             resolution: LivekitClient.VideoPresets.h720.resolution,
           },
         });
-        
+
+        // Connect without enabling media initially
         await room.connect(
           "wss://video-chat-application-7u5wc7ae.livekit.cloud",
           token
         );
-        
+
         setRoom(room);
         setConnectionStatus("connected");
-        
+
+        // Set initial states to off
         await room.localParticipant.setMicrophoneEnabled(false);
         await room.localParticipant.setCameraEnabled(false);
       } catch (error) {
@@ -359,6 +353,7 @@ const CodingEnvi = () => {
   }, [sessionId]);
 
   const cleanupSession = () => {
+    // Clean up video streams
     setVideoStreams({});
     Object.keys(videoRefs.current).forEach((sid) => {
       if (videoRefs.current[sid]) {
@@ -366,7 +361,11 @@ const CodingEnvi = () => {
       }
     });
     videoRefs.current = {};
+
+    // Clean up pinned video
     setPinnedVideo(null);
+
+    // Clean up Yjs
     if (bindingRef.current) bindingRef.current.destroy();
     if (providerRef.current) providerRef.current.destroy();
     if (yDocRef.current) yDocRef.current.destroy();
@@ -385,8 +384,9 @@ const CodingEnvi = () => {
           return newStreams;
         });
       }
+      // Audio tracks are now available to all participants
       if (track.kind === "audio") {
-        track.attach();
+        track.attach(); // Ensure audio is attached for all participants
       }
     };
 
@@ -404,9 +404,13 @@ const CodingEnvi = () => {
     const handleLocalTrackPublished = (publication) => {
       if (publication.track.kind === "video") {
         setVideoStreams((prev) => {
-          const newStreams = { ...prev, [publication.trackSid]: publication.track.mediaStream };
+          const newStreams = {
+            ...prev,
+            [publication.trackSid]: publication.track.mediaStream,
+          };
           if (videoRefs.current[publication.trackSid]) {
-            videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
+            videoRefs.current[publication.trackSid].srcObject =
+              publication.track.mediaStream;
           }
           return newStreams;
         });
@@ -537,7 +541,10 @@ const CodingEnvi = () => {
     editorRef.current = editor;
     monacoRef.current = monaco;
     monaco.editor.defineTheme("night-owl", NightOwl);
+
+    // Set the initial theme based on the current theme state
     setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
+
     setIsEditorReady(true);
   };
 
@@ -586,6 +593,7 @@ const CodingEnvi = () => {
         theme === "dark" ? "night-owl" : "light"
       );
     }
+
     setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
   }, [theme]);
 
@@ -611,7 +619,7 @@ const CodingEnvi = () => {
 
       result.isError =
         result.status !== "Accepted" &&
-        (!result.exit && result.exitCode || result.exitCode !== 0);
+        (!result.exitCode || result.exitCode !== 0);
       setCodeOutput(result);
       setFetchTime((endTime - startTime).toFixed(2));
       setComplexity("O(n)");
@@ -697,10 +705,12 @@ const CodingEnvi = () => {
     if (room && room.localParticipant) {
       try {
         if (!videoEnabled) {
+          // Request permission when turning on
           const permission = await navigator.mediaDevices.getUserMedia({
             video: true,
           });
-          permission.getTracks().forEach((track) => track.stop());
+          permission.getTracks().forEach((track) => track.stop()); // Stop the temporary stream
+
           await room.localParticipant.setCameraEnabled(true);
           setVideoEnabled(true);
         } else {
@@ -966,11 +976,27 @@ const CodingEnvi = () => {
                       <div className="flex items-center gap-2">
                         <span className="text-sm">{displayName}</span>
                         <div className="flex gap-1">
-                          <span className={micOn ? "text-green-500" : "text-red-500"}>
-                            {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                          <span
+                            className={
+                              micOn ? "text-green-500" : "text-red-500"
+                            }
+                          >
+                            {micOn ? (
+                              <Mic className="h-4 w-4" />
+                            ) : (
+                              <MicOff className="h-4 w-4" />
+                            )}
                           </span>
-                          <span className={videoOn ? "text-green-500" : "text-red-500"}>
-                            {videoOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                          <span
+                            className={
+                              videoOn ? "text-green-500" : "text-red-500"
+                            }
+                          >
+                            {videoOn ? (
+                              <Video className="h-4 w-4" />
+                            ) : (
+                              <VideoOff className="h-4 w-4" />
+                            )}
                           </span>
                         </div>
                       </div>
@@ -1352,9 +1378,8 @@ const CodingEnvi = () => {
                       <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
                         {sid.includes(auth.currentUser?.uid)
                           ? "You"
-                          : participants.find((p) =>
-                              sid.includes(p.uid)
-                            )?.username || "Unknown"}
+                          : participants.find((p) => sid.includes(p.uid))
+                              ?.username || "Unknown"}
                       </div>
                       <div className="absolute top-2 right-2 flex gap-1">
                         <Button
@@ -1380,7 +1405,7 @@ const CodingEnvi = () => {
 
             <TabsContent
               value="chat"
-              className="flex-1 p-0 m-0 flex flex-col right-sidebar-content"
+              className="flex-1  p-0 m-0 flex flex-col"
             >
               <ScrollArea className="flex-1 p-2" ref={chatScrollRef}>
                 {chatMessages.map((message) => {
