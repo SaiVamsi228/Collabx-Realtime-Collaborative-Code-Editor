@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
+import { defineTheme } from "monaco-themes"; // Import defineTheme from monaco-themes
+import NightOwl from "monaco-themes/themes/Night Owl.json"; // Import Night Owl theme data
 import {
   Users,
   Play,
@@ -539,6 +541,11 @@ const CodingEnvi = () => {
   const handleEditorDidMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+    monaco.editor.defineTheme("night-owl", NightOwl);
+
+    // Set the initial theme based on the current theme state
+    setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
+
     setIsEditorReady(true);
   };
 
@@ -582,7 +589,13 @@ const CodingEnvi = () => {
   }, [isEditorReady, selectedLanguage, sessionId]);
 
   useEffect(() => {
-    setMonacoTheme(theme === "dark" ? "vs-dark" : "light");
+    if (monacoRef.current){
+      monacoRef.current.editor.setTheme(
+        theme === "dark" ? "night-owl" : "light"
+      );
+    }
+
+    setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
   }, [theme]);
 
   const handleRunCode = async (stdin = "") => {
