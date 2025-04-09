@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { defineTheme } from "monaco-themes"; // Import defineTheme from monaco-themes
-import NightOwl from "monaco-themes/themes/Night Owl.json"; // Import Night Owl theme data
+import { defineTheme } from "monaco-themes";
+import NightOwl from "monaco-themes/themes/Night Owl.json";
 import {
   Users,
   Play,
@@ -22,6 +22,7 @@ import {
   FileInputIcon,
   Sun,
   Moon,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import {
@@ -90,31 +91,66 @@ const styles = `
   }
 
   .video-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 8px;
-  height: 100%; /* Ensure it takes the full height of its container */
-}
-.video-wrapper {
-  position: relative;
-  padding-bottom: 56.25%; /* 16:9 aspect ratio */
-  height: 0; /* Allows padding-bottom to control height */
-}
-.video-wrapper video {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 4px;
-  background-color: #333;
-}
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    height: 100%;
+    width: 100%;
+  }
+  
+  .video-wrapper {
+    position: relative;
+    padding-bottom: 56.25%;
+    height: 0;
+    width: 100%;
+  }
+  
+  .video-wrapper video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+    background-color: #333;
+    translate: scaleX(-1);
+  }
 
   .right-sidebar-content {
     flex: 1;
     display: flex;
     flex-direction: column;
+    height: 100%;
+  }
+
+  .chat-container {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .new-messages-indicator {
+    position: sticky;
+    bottom: 60px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 4px;
+    pointer-events: none;
+  }
+
+  .new-messages-button {
+    pointer-events: all;
+    background: #3182ce;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   }
 `;
 
@@ -211,8 +247,8 @@ const CodingEnvi = () => {
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [versionControlExpanded, setVersionControlExpanded] = useState(false);
   const [rightSidebarTab, setRightSidebarTab] = useState("video");
-  const [micEnabled, setMicEnabled] = useState(false); // Initially off
-  const [videoEnabled, setVideoEnabled] = useState(false); // Initially off
+  const [micEnabled, setMicEnabled] = useState(false);
+  const [videoEnabled, setVideoEnabled] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
   const [previousLanguage, setPreviousLanguage] = useState(initialLanguage);
   const [codeOutput, setCodeOutput] = useState(null);
@@ -242,6 +278,9 @@ const CodingEnvi = () => {
   const [room, setRoom] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [videoStreams, setVideoStreams] = useState({});
+  const [newMessageCount, setNewMessageCount] = useState(0);
+  const [lastVisibleMessageIndex, setLastVisibleMessageIndex] = useState(-1);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   const pinnedVideoRef = useRef(null);
   const editorRef = useRef(null);
@@ -252,6 +291,7 @@ const CodingEnvi = () => {
   const editTimeouts = useRef(new Map());
   const chatScrollRef = useRef(null);
   const videoRefs = useRef({});
+  const chatContainerRef = useRef(null);
 
   const languages = [
     "javascript",
@@ -302,14 +342,25 @@ const CodingEnvi = () => {
         ...doc.data(),
       }));
       setChatMessages(messages);
-      setTimeout(() => {
-        if (chatScrollRef.current) {
-          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+      
+      if (chatScrollRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = chatScrollRef.current;
+        const isBottom = scrollTop + clientHeight >= scrollHeight - 10;
+        setIsAtBottom(isBottom);
+        
+        if (isBottom) {
+          setTimeout(() => {
+            chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+          }, 100);
+          setNewMessageCount(0);
+          setLastVisibleMessageIndex(messages.length - 1);
+        } else if (messages.length > 0) {
+          setNewMessageCount(messages.length - lastVisibleMessageIndex - 1);
         }
-      }, 100);
+      }
     });
     return () => unsubscribe();
-  }, [sessionId]);
+  }, [sessionId, lastVisibleMessageIndex]);
 
   useEffect(() => {
     const joinRoom = async () => {
@@ -325,7 +376,6 @@ const CodingEnvi = () => {
           },
         });
 
-        // Connect without enabling media initially
         await room.connect(
           "wss://video-chat-application-7u5wc7ae.livekit.cloud",
           token
@@ -334,7 +384,6 @@ const CodingEnvi = () => {
         setRoom(room);
         setConnectionStatus("connected");
 
-        // Set initial states to off
         await room.localParticipant.setMicrophoneEnabled(false);
         await room.localParticipant.setCameraEnabled(false);
       } catch (error) {
@@ -353,7 +402,6 @@ const CodingEnvi = () => {
   }, [sessionId]);
 
   const cleanupSession = () => {
-    // Clean up video streams
     setVideoStreams({});
     Object.keys(videoRefs.current).forEach((sid) => {
       if (videoRefs.current[sid]) {
@@ -361,11 +409,8 @@ const CodingEnvi = () => {
       }
     });
     videoRefs.current = {};
-
-    // Clean up pinned video
     setPinnedVideo(null);
 
-    // Clean up Yjs
     if (bindingRef.current) bindingRef.current.destroy();
     if (providerRef.current) providerRef.current.destroy();
     if (yDocRef.current) yDocRef.current.destroy();
@@ -384,9 +429,8 @@ const CodingEnvi = () => {
           return newStreams;
         });
       }
-      // Audio tracks are now available to all participants
       if (track.kind === "audio") {
-        track.attach(); // Ensure audio is attached for all participants
+        track.attach();
       }
     };
 
@@ -541,10 +585,7 @@ const CodingEnvi = () => {
     editorRef.current = editor;
     monacoRef.current = monaco;
     monaco.editor.defineTheme("night-owl", NightOwl);
-
-    // Set the initial theme based on the current theme state
     setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
-
     setIsEditorReady(true);
   };
 
@@ -593,7 +634,6 @@ const CodingEnvi = () => {
         theme === "dark" ? "night-owl" : "light"
       );
     }
-
     setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
   }, [theme]);
 
@@ -692,6 +732,44 @@ const CodingEnvi = () => {
     setIsResizing(false);
   };
 
+  const handleChatScroll = () => {
+    if (chatScrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = chatScrollRef.current;
+      const isBottom = scrollTop + clientHeight >= scrollHeight - 10;
+      setIsAtBottom(isBottom);
+      
+      if (isBottom) {
+        setNewMessageCount(0);
+        setLastVisibleMessageIndex(chatMessages.length - 1);
+      }
+    }
+  };
+
+  const scrollToBottom = () => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTo({
+        top: chatScrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+      setNewMessageCount(0);
+      setLastVisibleMessageIndex(chatMessages.length - 1);
+    }
+  };
+
+  const scrollToFirstUnread = () => {
+    if (chatScrollRef.current && lastVisibleMessageIndex < chatMessages.length - 1) {
+      const unreadIndex = lastVisibleMessageIndex + 1;
+      const unreadElement = chatScrollRef.current.querySelector(
+        `[data-message-index="${unreadIndex}"]`
+      );
+      if (unreadElement) {
+        unreadElement.scrollIntoView({ behavior: "smooth" });
+        setNewMessageCount(0);
+        setLastVisibleMessageIndex(chatMessages.length - 1);
+      }
+    }
+  };
+
   useEffect(() => {
     window.addEventListener("mousemove", handleResizeMove);
     window.addEventListener("mouseup", handleResizeEnd);
@@ -705,12 +783,10 @@ const CodingEnvi = () => {
     if (room && room.localParticipant) {
       try {
         if (!videoEnabled) {
-          // Request permission when turning on
           const permission = await navigator.mediaDevices.getUserMedia({
             video: true,
           });
-          permission.getTracks().forEach((track) => track.stop()); // Stop the temporary stream
-
+          permission.getTracks().forEach((track) => track.stop());
           await room.localParticipant.setCameraEnabled(true);
           setVideoEnabled(true);
         } else {
@@ -1156,7 +1232,7 @@ const CodingEnvi = () => {
                           </SelectItem>
                           <SelectItem
                             value="14"
-                            className={`cursor-pointer text-white ${
+                            className={`cursor-pointer text-whiteTop Bar ${
                               theme === "dark"
                                 ? "hover:bg-gray-600"
                                 : "hover:bg-gray-200 text-black"
@@ -1360,7 +1436,7 @@ const CodingEnvi = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="p-2 flex-1 overflow-auto">
+              <ScrollArea className="flex-1 p-2">
                 <div className="video-grid">
                   {Object.entries(videoStreams).map(([sid, stream]) => (
                     <div key={sid} className="video-wrapper">
@@ -1400,98 +1476,116 @@ const CodingEnvi = () => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </ScrollArea>
             </TabsContent>
 
             <TabsContent
               value="chat"
-              className="flex-1  p-0 m-0 flex flex-col"
+              className="flex-1 p-0 m-0 right-sidebar-content"
             >
-              <ScrollArea className="flex-1 p-2" ref={chatScrollRef}>
-                {chatMessages.map((message) => {
-                  const sender = participants.find(
-                    (p) => p.uid === message.senderId
-                  );
-                  const isCurrentUser =
-                    message.senderId === auth.currentUser?.uid;
-                  return (
-                    <div
-                      key={message.id}
-                      className={`flex items-start gap-2 mb-2 ${
-                        isCurrentUser ? "justify-end" : "justify-start"
-                      }`}
-                    >
-                      {!isCurrentUser && (
-                        <Avatar className="h-6 w-6">
-                          <AvatarImage src={sender?.avatar} />
-                          <AvatarFallback>
-                            {message.senderName.charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                      )}
+              <div className="chat-container" ref={chatContainerRef}>
+                <ScrollArea 
+                  className="flex-1 p-2" 
+                  ref={chatScrollRef}
+                  onScroll={handleChatScroll}
+                >
+                  {chatMessages.map((message, index) => {
+                    const sender = participants.find(
+                      (p) => p.uid === message.senderId
+                    );
+                    const isCurrentUser =
+                      message.senderId === auth.currentUser?.uid;
+                    return (
                       <div
-                        className={`max-w-[70%] p-2 rounded-lg ${
-                          isCurrentUser
-                            ? "bg-green-600 text-white"
-                            : "bg-gray-200 text-black"
+                        key={message.id}
+                        data-message-index={index}
+                        className={`flex items-start gap-2 mb-2 ${
+                          isCurrentUser ? "justify-end" : "justify-start"
                         }`}
                       >
                         {!isCurrentUser && (
-                          <span className="text-xs font-semibold block">
-                            {message.senderName}
-                          </span>
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={sender?.avatar} />
+                            <AvatarFallback>
+                              {message.senderName.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
                         )}
-                        <p className="text-sm">{message.text}</p>
-                        <span className="text-xs opacity-70">
-                          {(() => {
-                            const date = new Date(message.timestamp);
-                            let hours = date.getHours();
-                            const minutes = date.getMinutes();
-                            const ampm = hours >= 12 ? "PM" : "AM";
-                            hours = hours % 12 || 12;
-                            const paddedMinutes = minutes
-                              .toString()
-                              .padStart(2, "0");
-                            return `${hours}:${paddedMinutes} ${ampm}`;
-                          })()}
-                        </span>
+                        <div
+                          className={`max-w-[70%] p-2 rounded-lg ${
+                            isCurrentUser
+                              ? "bg-green-600 text-white"
+                              : "bg-gray-200 text-black"
+                          }`}
+                        >
+                          {!isCurrentUser && (
+                            <span className="text-xs font-semibold block">
+                              {message.senderName}
+                            </span>
+                          )}
+                          <p className="text-sm">{message.text}</p>
+                          <span className="text-xs opacity-70">
+                            {(() => {
+                              const date = new Date(message.timestamp);
+                              let hours = date.getHours();
+                              const minutes = date.getMinutes();
+                              const ampm = hours >= 12 ? "PM" : "AM";
+                              hours = hours % 12 || 12;
+                              const paddedMinutes = minutes
+                                .toString()
+                                .padStart(2, "0");
+                              return `${hours}:${paddedMinutes} ${ampm}`;
+                            })()}
+                          </span>
+                        </div>
+                        {isCurrentUser && (
+                          <Avatar className="h-6 w-6">
+                            <AvatarImage src={auth.currentUser?.photoURL} />
+                            <AvatarFallback>
+                              {auth.currentUser?.displayName
+                                ?.charAt(0)
+                                .toUpperCase() || "U"}
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
                       </div>
-                      {isCurrentUser && (
-                        <Avatar className="h-6 w-6">
-                          <AvatarImage src={auth.currentUser?.photoURL} />
-                          <AvatarFallback>
-                            {auth.currentUser?.displayName
-                              ?.charAt(0)
-                              .toUpperCase() || "U"}
-                          </AvatarFallback>
-                        </Avatar>
-                      )}
-                    </div>
-                  );
-                })}
-              </ScrollArea>
-              <div className="p-2 border-t">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Type a message..."
-                    className="flex-1"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                  />
-                  <Button
-                    size="sm"
-                    className="rounded-lg bg-black text-white hover:bg-gray-900"
-                    onClick={handleSendMessage}
-                    disabled={!newMessage.trim()}
-                  >
-                    Send
-                  </Button>
+                    );
+                  })}
+                </ScrollArea>
+                {newMessageCount > 0 && !isAtBottom && (
+                  <div className="new-messages-indicator">
+                    <button
+                      className="new-messages-button"
+                      onClick={scrollToBottom}
+                    >
+                      <span>{newMessageCount} new messages</span>
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+                <div className="p-2 border-t">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Type a message..."
+                      className="flex-1"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      className="rounded-lg bg-black text-white hover:bg-gray-900"
+                      onClick={handleSendMessage}
+                      disabled={!newMessage.trim()}
+                    >
+                      Send
+                    </Button>
+                  </div>
                 </div>
               </div>
             </TabsContent>
