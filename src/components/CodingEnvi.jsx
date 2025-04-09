@@ -515,7 +515,7 @@ const CodingEnvi = () => {
   const initializeYjs = (language) => {
     if (!editorRef.current || !monacoRef.current) return;
 
-    if (bindingRef.current) bindingRef.current.destroy Ascendant;
+    if (bindingRef.current) bindingRef.current.destroy;
 
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
