@@ -127,6 +127,7 @@ const styles = `
     display: flex;
     flex-direction: column;
     height: 100%;
+    position: relative;
   }
 
   .chat-messages {
@@ -134,7 +135,8 @@ const styles = `
     min-height: 0;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
+    overflow-y: auto;
+    padding-bottom: 60px; /* Space for input */
   }
 
   .new-messages-indicator {
@@ -161,9 +163,14 @@ const styles = `
   }
 
   .chat-input-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
     padding: 8px;
     border-top: 1px solid #e5e7eb;
     background: inherit;
+    z-index: 20;
   }
 `;
 
@@ -361,7 +368,13 @@ const CodingEnvi = () => {
         const isBottom = scrollTop + clientHeight >= scrollHeight - 10;
         setIsAtBottom(isBottom);
         
-        if (isBottom) {
+        if (messages.length === 1) {
+          // For first message, scroll to top
+          chatScrollRef.current.scrollTop = 0;
+          setLastVisibleMessageIndex(0);
+          setNewMessageCount(0);
+        } else if (isBottom) {
+          // For subsequent messages when at bottom, scroll to bottom
           setTimeout(() => {
             chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
           }, 100);
@@ -515,7 +528,7 @@ const CodingEnvi = () => {
   const initializeYjs = (language) => {
     if (!editorRef.current || !monacoRef.current) return;
 
-    if (bindingRef.current) bindingRef.current.destroy;
+    if (bindingRef.current) bindingRef.current.destroy();
 
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
@@ -1500,68 +1513,71 @@ const CodingEnvi = () => {
                   ref={chatScrollRef}
                   onScroll={handleChatScroll}
                 >
-                  {chatMessages.map((message, index) => {
-                    const sender = participants.find(
-                      (p) => p.uid === message.senderId
-                    );
-                    const isCurrentUser =
-                      message.senderId === auth.currentUser?.uid;
-                    return (
-                      <div
-                        key={message.id}
-                        data-message-index={index}
-                        className={`flex items-start gap-2 mb-2 ${
-                          isCurrentUser ? "justify-end" : "justify-start"
-                        }`}
-                      >
-                        {!isCurrentUser && (
-                          <Avatar className="h-6 w-6">
-                            <AvatarImage src={sender?. avatar} />
-                            <AvatarFallback>
-                              {message.senderName.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
+                  <div className="flex flex-col min-h-full">
+                    <div className="flex-1"></div> {/* Spacer to push messages to bottom */}
+                    {chatMessages.map((message, index) => {
+                      const sender = participants.find(
+                        (p) => p.uid === message.senderId
+                      );
+                      const isCurrentUser =
+                        message.senderId === auth.currentUser?.uid;
+                      return (
                         <div
-                          className={`max-w-[70%] p-2 rounded-lg ${
-                            isCurrentUser
-                              ? "bg-green-600 text-white"
-                              : "bg-gray-200 text-black"
+                          key={message.id}
+                          data-message-index={index}
+                          className={`flex items-start gap-2 mb-2 ${
+                            isCurrentUser ? "justify-end" : "justify-start"
                           }`}
                         >
                           {!isCurrentUser && (
-                            <span className="text-xs font-semibold block">
-                              {message.senderName}
-                            </span>
+                            <Avatar className="h-6 w-6">
+                              <AvatarImage src={sender?.avatar} />
+                              <AvatarFallback>
+                                {message.senderName.charAt(0).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
                           )}
-                          <p className="text-sm">{message.text}</p>
-                          <span className="text-xs opacity-70">
-                            {(() => {
-                              const date = new Date(message.timestamp);
-                              let hours = date.getHours();
-                              const minutes = date.getMinutes();
-                              const ampm = hours >= 12 ? "PM" : "AM";
-                              hours = hours % 12 || 12;
-                              const paddedMinutes = minutes
-                                .toString()
-                                .padStart(2, "0");
-                              return `${hours}:${paddedMinutes} ${ampm}`;
-                            })()}
-                          </span>
+                          <div
+                            className={`max-w-[70%] p-2 rounded-lg ${
+                              isCurrentUser
+                                ? "bg-green-600 text-white"
+                                : "bg-gray-200 text-black"
+                            }`}
+                          >
+                            {!isCurrentUser && (
+                              <span className="text-xs font-semibold block">
+                                {message.senderName}
+                              </span>
+                            )}
+                            <p className="text-sm">{message.text}</p>
+                            <span className="text-xs opacity-70">
+                              {(() => {
+                                const date = new Date(message.timestamp);
+                                let hours = date.getHours();
+                                const minutes = date.getMinutes();
+                                const ampm = hours >= 12 ? "PM" : "AM";
+                                hours = hours % 12 || 12;
+                                const paddedMinutes = minutes
+                                  .toString()
+                                  .padStart(2, "0");
+                                return `${hours}:${paddedMinutes} ${ampm}`;
+                              })()}
+                            </span>
+                          </div>
+                          {isCurrentUser && (
+                            <Avatar className="h-6 w-6">
+                              <AvatarImage src={auth.currentUser?.photoURL} />
+                              <AvatarFallback>
+                                {auth.currentUser?.displayName
+                                  ?.charAt(0)
+                                  .toUpperCase() || "U"}
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
                         </div>
-                        {isCurrentUser && (
-                          <Avatar className="h-6 w-6">
-                            <AvatarImage src={auth.currentUser?.photoURL} />
-                            <AvatarFallback>
-                              {auth.currentUser?.displayName
-                                ?.charAt(0)
-                                .toUpperCase() || "U"}
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </ScrollArea>
                 {newMessageCount > 0 && !isAtBottom && (
                   <div className="new-messages-indicator">
