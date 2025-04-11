@@ -1563,7 +1563,7 @@ const CodingEnvi = () => {
                       onClick={scrollToBottom}
                     >
                       <ChevronDown className="h-4 w-4" />
-                      {newMessageCount} new message{newMessageCount > 1 ? "s" : ""}
+                      {newMessageCount} new message{newMessageCount > 1 ? "s" : ""} //
                     </div>
                   </div>
                 )}
