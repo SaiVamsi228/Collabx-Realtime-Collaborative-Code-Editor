@@ -64,8 +64,7 @@ import {
 } from "firebase/firestore";
 import * as LivekitClient from "livekit-client";
 
-const styles = 
-`
+const styles = `
   .participant-container {
     position: relative;
     padding: 8px;
@@ -127,14 +126,16 @@ const styles =
     display: flex;
     flex-direction: column;
     height: 100%;
-    overflow: hidden;
+    position: relative;
   }
 
   .chat-messages {
     flex: 1;
     overflow-y: auto;
+    padding: 10px;
     display: flex;
-    flex-direction: column-reverse; /* Reverse order for Telegram-like behavior */
+    flex-direction: column-reverse; /* Reverse for bottom-to-top stacking */
+    gap: 10px;
   }
 
   .new-messages-indicator {
@@ -158,85 +159,64 @@ const styles =
     align-items: center;
     gap: 4px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    cursor: pointer;
+  }
+
+  .message {
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .message.sent {
+    justify-content: flex-end;
+  }
+
+  .message.received {
+    justify-content: flex-start;
+  }
+
+  .message-content {
+    max-width: 70%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background-color: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  .message.sent .message-content {
+    background-color: #dcf8c6;
+  }
+
+  .message.received .message-content {
+    background-color: #ffffff;
+  }
+
+  .sender {
+    font-size: 12px;
+    font-weight: bold;
+    color: #333;
+    display: block;
+  }
+
+  .message-content p {
+    margin: 4px 0;
+    word-wrap: break-word;
+  }
+
+  .timestamp {
+    font-size: 10px;
+    color: #888;
+    display: block;
+    text-align: right;
   }
 
   .chat-input-container {
-    padding: 8px;
-    border-top: 1px solid #e5e7eb;
+    position: sticky;
+    bottom: 0;
+    padding: 10px;
     background: inherit;
+    border-top: 1px solid #e5e7eb;
   }
-
-  .chat-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  position: relative;
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.message {
-  display: flex;
-  align-items: flex-end;
-}
-
-.message.sent {
-  justify-content: flex-end;
-}
-
-.message.received {
-  justify-content: flex-start;
-}
-
-.message-content {
-  max-width: 70%;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background-color: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.message.sent .message-content {
-  background-color: #dcf8c6;
-}
-
-.message.received .message-content {
-  background-color: #ffffff;
-}
-
-.sender {
-  font-size: 12px;
-  font-weight: bold;
-  color: #333;
-  display: block;
-}
-
-.message-content p {
-  margin: 4px 0;
-  word-wrap: break-word;
-}
-
-.timestamp {
-  font-size: 10px;
-  color: #888;
-  display: block;
-  text-align: right;
-}
-
-.chat-input-container {
-  position: sticky;
-  bottom: 0;
-  padding: 10px;
-  background: inherit;
-  border-top: 1px solid #e5e7eb;
-}
 `;
 
 const styleSheet = document.createElement("style");
@@ -364,7 +344,6 @@ const CodingEnvi = () => {
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
   const [videoStreams, setVideoStreams] = useState({});
   const [newMessageCount, setNewMessageCount] = useState(0);
-  const [lastVisibleMessageIndex, setLastVisibleMessageIndex] = useState(-1);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
   const pinnedVideoRef = useRef(null);
@@ -428,22 +407,17 @@ const CodingEnvi = () => {
       }));
       setChatMessages(messages);
 
-      // Auto-scroll to bottom if the user is already at the bottom
-      if (chatMessagesRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } =
-          chatMessagesRef.current;
-        const isAtBottom =
-          Math.abs(scrollHeight - scrollTop - clientHeight) <= 10;
-
-        if (isAtBottom) {
-          setTimeout(() => {
-            chatMessagesRef.current.scrollTop = 0; // Scroll to top due to reverse layout
-          }, 0);
-        }
+      if (chatMessagesRef.current && isAtBottom) {
+        setTimeout(() => {
+          chatMessagesRef.current.scrollTop = 0; // Scroll to top due to flex-direction: column-reverse
+        }, 0);
+      } else {
+        // Increment new message count if not at bottom
+        setNewMessageCount((prev) => prev + snapshot.docChanges().length);
       }
     });
     return () => unsubscribe();
-  }, [sessionId]);
+  }, [sessionId, isAtBottom]);
 
   useEffect(() => {
     const joinRoom = async () => {
@@ -763,6 +737,7 @@ const CodingEnvi = () => {
         timestamp: new Date().toISOString(),
       });
       setNewMessage("");
+      scrollToBottom();
     } catch (error) {
       console.error("Error sending message:", error);
     }
@@ -818,37 +793,17 @@ const CodingEnvi = () => {
       const { scrollTop, scrollHeight, clientHeight } = chatMessagesRef.current;
       const isAtBottom =
         Math.abs(scrollHeight - scrollTop - clientHeight) <= 10;
-
       setIsAtBottom(isAtBottom);
       if (isAtBottom) {
         setNewMessageCount(0);
-        setLastVisibleMessageIndex(chatMessages.length - 1);
       }
     }
   };
 
   const scrollToBottom = () => {
     if (chatMessagesRef.current) {
-      chatMessagesRef.current.scrollTop = 0; // Scroll to top due to reverse layout
+      chatMessagesRef.current.scrollTop = 0; // Scroll to top due to flex-direction: column-reverse
       setNewMessageCount(0);
-      setLastVisibleMessageIndex(chatMessages.length - 1);
-    }
-  };
-
-  const scrollToFirstUnread = () => {
-    if (
-      chatMessagesRef.current &&
-      lastVisibleMessageIndex < chatMessages.length - 1
-    ) {
-      const unreadIndex = lastVisibleMessageIndex + 1;
-      const unreadElement = chatMessagesRef.current.querySelector(
-        `[data-message-index="${unreadIndex}"]`
-      );
-      if (unreadElement) {
-        unreadElement.scrollIntoView({ behavior: "smooth" });
-        setNewMessageCount(0);
-        setLastVisibleMessageIndex(chatMessages.length - 1);
-      }
     }
   };
 
@@ -860,6 +815,12 @@ const CodingEnvi = () => {
       window.removeEventListener("mouseup", handleResizeEnd);
     };
   }, [isResizing]);
+
+  useEffect(() => {
+    if (chatMessagesRef.current && chatMessages.length > 0) {
+      scrollToBottom();
+    }
+  }, []);
 
   const toggleVideo = async () => {
     if (room && room.localParticipant) {
@@ -1561,58 +1522,77 @@ const CodingEnvi = () => {
               </ScrollArea>
             </TabsContent>
 
-            <TabsContent value="chat" className="flex-1 m-0 p-0 right-sidebar-content">
-  <div className="chat-container" ref={chatContainerRef}>
-    <ScrollArea className="chat-messages p-2" ref={chatMessagesRef}>
-      {chatMessages.map((message) => {
-        const isCurrentUser = message.senderId === auth.currentUser?.uid;
-        return (
-          <div
-            key={message.id}
-            className={`message ${isCurrentUser ? "sent" : "received"}`}
-          >
-            <div className="message-content">
-              {!isCurrentUser && (
-                <span className="sender">{message.senderName}</span>
-              )}
-              <p>{message.text}</p>
-              <span className="timestamp">
-                {new Date(message.timestamp).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </ScrollArea>
-    <div className="chat-input-container">
-      <div className="flex gap-2">
-        <Input
-          placeholder="Type a message..."
-          className="flex-1"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          onKeyPress={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSendMessage();
-            }
-          }}
-        />
-        <Button
-          size="sm"
-          className="rounded-lg bg-black text-white hover:bg-gray-900"
-          onClick={handleSendMessage}
-          disabled={!newMessage.trim()}
-        >
-          Send
-        </Button>
-      </div>
-    </div>
-  </div>
-</TabsContent>
+            <TabsContent
+              value="chat"
+              className="flex-1 m-0 p-0 right-sidebar-content"
+            >
+              <div className="chat-container" ref={chatContainerRef}>
+                <ScrollArea
+                  className="chat-messages"
+                  ref={chatMessagesRef}
+                  onScroll={handleChatScroll}
+                >
+                  {chatMessages.map((message, index) => {
+                    const isCurrentUser = message.senderId === auth.currentUser?.uid;
+                    return (
+                      <div
+                        key={message.id}
+                        className={`message ${isCurrentUser ? "sent" : "received"}`}
+                        data-message-index={index}
+                      >
+                        <div className="message-content">
+                          {!isCurrentUser && (
+                            <span className="sender">{message.senderName}</span>
+                          )}
+                          <p>{message.text}</p>
+                          <span className="timestamp">
+                            {new Date(message.timestamp).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </ScrollArea>
+                {newMessageCount > 0 && !isAtBottom && (
+                  <div className="new-messages-indicator">
+                    <div
+                      className="new-messages-button"
+                      onClick={scrollToBottom}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                      {newMessageCount} new message{newMessageCount > 1 ? "s" : ""}
+                    </div>
+                  </div>
+                )}
+                <div className="chat-input-container">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Type a message..."
+                      className="flex-1"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      className="rounded-lg bg-black text-white hover:bg-gray-900"
+                      onClick={handleSendMessage}
+                      disabled={!newMessage.trim()}
+                    >
+                      Send
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
           </Tabs>
         </div>
       </div>
