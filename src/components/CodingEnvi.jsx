@@ -1,54 +1,14 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { defineTheme } from "monaco-themes";
 import NightOwl from "monaco-themes/themes/Night Owl.json";
-import {
-  Users,
-  Play,
-  Share,
-  Settings,
-  GitBranch,
-  Clock,
-  Cpu,
-  Languages,
-  Video,
-  VideoOff,
-  MicOff,
-  Mic,
-  LogOut,
-  MessageSquare,
-  X,
-  Maximize2,
-  PinIcon,
-  FileInputIcon,
-  Sun,
-  Moon,
-  ChevronDown,
-} from "lucide-react";
-import { Button } from "./ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "./ui/tooltip";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { Badge } from "./ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Textarea } from "./ui/textarea";
-import { Input } from "./ui/input";
-import { ScrollArea } from "./ui/scroll-area";
+import LeftSidebar from "./LeftSidebar";
+import TopBar from "./TopBar";
+import PinnedVideo from "./PinnedVideo";
+import EditorArea from "./EditorArea";
+import RightSidebar from "./RightSidebar";
+import BottomBar from "./BottomBar";
 import { ThemeProvider, useTheme } from "./theme-provider";
 import "../styles/CodingEnvi.css";
 import { executeCode } from "../api/judge0Service";
-import Editor from "@monaco-editor/react";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { MonacoBinding } from "y-monaco";
@@ -223,64 +183,6 @@ const styleSheet = document.createElement("style");
 styleSheet.textContent = styles;
 document.head.appendChild(styleSheet);
 
-const OutputPanel = ({
-  result,
-  isLoading,
-  error,
-  theme,
-  fetchTime,
-  complexity,
-}) => {
-  return (
-    <ScrollArea
-      className={`h-[200px] p-4 ${
-        theme === "dark" ? "text-white" : "text-black"
-      }`}
-    >
-      {isLoading ? (
-        <div className="flex items-center gap-2">
-          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-green-500"></div>
-          <p className="text-sm">Compiling and running code...</p>
-        </div>
-      ) : error ? (
-        <div>
-          <h3 className="text-sm font-semibold text-red-500">
-            Compilation Failed
-          </h3>
-          <pre className="mt-2 text-xs whitespace-pre-wrap">
-            {error.message || "Something went wrong."}
-          </pre>
-        </div>
-      ) : result ? (
-        <div>
-          <p
-            className={`text-sm ${
-              result.isError ? "text-red-500" : "text-green-500"
-            }`}
-          >
-            <strong>Status:</strong>{" "}
-            {result.isError ? "Compilation Failed" : "Compiled Successfully"}
-          </p>
-          <pre className="mt-2 text-xs whitespace-pre-wrap">
-            {result.output || "No output generated."}
-          </pre>
-          {fetchTime && (
-            <p className="text-xs mt-2">
-              <strong>Fetch Time:</strong> {fetchTime} ms
-            </p>
-          )}
-          {complexity && (
-            <p className="text-xs mt-1">
-              <strong>Complexity:</strong> {complexity}
-            </p>
-          )}
-        </div>
-      ) : (
-        <p className="text-sm">Run your code to see the output here.</p>
-      )}
-    </ScrollArea>
-  );
-};
 
 const getLiveKitToken = async (roomName, participantName) => {
   const response = await fetch(
@@ -324,12 +226,13 @@ const CodingEnvi = () => {
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const videoRefs = useRef({});
   const [showRunWithInput, setShowRunWithInput] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const { theme, setTheme } = useTheme();
-  const [fontSize, setFontSize] = useState(14);
+  const [fontSize, setFontSize] = useState(18);
   const [tabSize, setTabSize] = useState(2);
   const [monacoTheme, setMonacoTheme] = useState("vs-dark");
   const [isEditorReady, setIsEditorReady] = useState(false);
@@ -346,7 +249,6 @@ const CodingEnvi = () => {
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
-  const pinnedVideoRef = useRef(null);
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const yDocRef = useRef(null);
@@ -355,7 +257,6 @@ const CodingEnvi = () => {
   const editTimeouts = useRef(new Map());
   const chatContainerRef = useRef(null);
   const chatMessagesRef = useRef(null);
-  const videoRefs = useRef({});
 
   const languages = [
     "javascript",
@@ -686,7 +587,7 @@ const CodingEnvi = () => {
   useEffect(() => {
     if (monacoRef.current) {
       monacoRef.current.editor.setTheme(
-        theme === "dark" ? "night-owl" : "light"
+        theme === "dark" ? "night-owl" : "vs-light"
       );
     }
     setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
@@ -743,25 +644,26 @@ const CodingEnvi = () => {
     }
   };
 
-  const handleMouseDown = (e) => {
-    if (pinnedVideoRef.current && pinnedVideo !== null) {
-      setIsDragging(true);
-      const rect = pinnedVideoRef.current.getBoundingClientRect();
-      setDragOffset({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
-    }
-  };
-
   const handleMouseMove = (e) => {
-    if (isDragging && pinnedVideoRef.current) {
-      const newX = e.clientX - dragOffset.x;
-      const newY = e.clientY - dragOffset.y;
+    if (isDragging) {
+      const newX = Math.max(
+        0,
+        Math.min(
+          e.clientX - dragOffset.x,
+          window.innerWidth - 240 // Assuming width: 240px
+        )
+      );
+      const newY = Math.max(
+        0,
+        Math.min(
+          e.clientY - dragOffset.y,
+          window.innerHeight - 180 // Assuming height: 180px
+        )
+      );
       setPinnedVideoPosition({ x: newX, y: newY });
     }
   };
-
+  
   const handleMouseUp = () => {
     setIsDragging(false);
   };
@@ -848,872 +750,120 @@ const CodingEnvi = () => {
 
   return (
     <div
-      className={`flex flex-col h-screen coding-envi ${
-        theme === "dark" ? "dark" : ""
-      }`}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-    >
-      {/* Top Bar */}
-      <div className="flex items-center justify-between p-2 border-b">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`rounded-xl bg-transparent text-black ${
-              theme === "light"
-                ? "hover:bg-gray-100 text-black"
-                : "hover:bg-gray-800 text-white"
-            }`}
-            onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
-          >
-            <Users className="w-5 h-5 bg-transparent" />
-          </Button>
-          <div className="w-[215px] h-[50px] flex items-center justify-center bg-transparent">
-            <span>CollabX - Session: {sessionId}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select Language" />
-            </SelectTrigger>
-            <SelectContent
-              className={theme === "dark" ? "bg-gray-800" : "bg-white"}
-            >
-              {languages.map((lang) => (
-                <SelectItem
-                  key={lang}
-                  value={lang}
-                  className={`cursor-pointer text-white ${
-                    theme === "dark"
-                      ? "hover:bg-gray-600"
-                      : "hover:bg-gray-200 text-black"
-                  }`}
-                >
-                  {lang.charAt(0).toUpperCase() + lang.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="default"
-                  className="rounded-lg bg-green-700 hover:bg-green-600 text-white"
-                  onClick={() => handleRunCode()}
-                  disabled={isLoading}
-                >
-                  <Play className="h-4 w-4 mr-1" />
-                  Run
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Run code (Ctrl+Enter)</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={`rounded-lg bg-transparent ${
-                    theme === "light"
-                      ? "hover:bg-gray-100 text-black"
-                      : "hover:bg-gray-800 text-white"
-                  } border border-gray-20`}
-                  onClick={() => setShowRunWithInput(!showRunWithInput)}
-                >
-                  <FileInputIcon className="h-4 w-4 mr-2" />
-                  Run with Input
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Run with custom input</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={`rounded-lg bg-transparent ${
-                    theme === "light"
-                      ? "hover:bg-gray-100 text-black"
-                      : "hover:bg-gray-800 text-white"
-                  } border border-gray-11`}
-                  onClick={toggleTheme}
-                >
-                  {theme === "dark" ? (
-                    <Sun className="h-4 w-4" />
-                  ) : (
-                    <Moon className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Toggle {theme === "dark" ? "Light" : "Dark"} Mode
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={`rounded-lg bg-transparent ${
-                    theme === "light"
-                      ? "hover:bg-gray-100 text-black"
-                      : "hover:bg-gray-800 text-white"
-                  } border border-gray-11`}
-                  onClick={() =>
-                    setVersionControlExpanded(!versionControlExpanded)
-                  }
-                >
-                  <GitBranch className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>View version control</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={`rounded-lg bg-transparent ${
-                    theme === "light"
-                      ? "hover:bg-gray-100 text-black"
-                      : "hover:bg-gray-800 text-white"
-                  } border border-gray-11`}
-                  onClick={() => setSettingsExpanded(!settingsExpanded)}
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Adjust settings</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={`rounded-lg bg-transparent ${
-                    theme === "light"
-                      ? "hover:bg-gray-100 text-black"
-                      : "hover:bg-gray-800 text-white"
-                  } border border-gray-11`}
-                >
-                  <Share className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Share this session</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <Button
-            variant="ghost"
-            className={`rounded-lg bg-transparent ${
-              theme === "light"
-                ? "hover:bg-gray-100 text-black"
-                : "hover:bg-gray-800 text-white"
-            }`}
-            size="icon"
-            onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
-          >
-            {rightSidebarTab === "video" ? (
-              <Video className="h-5 w-5" />
-            ) : (
-              <MessageSquare className="h-5 w-5" />
-            )}
-          </Button>
-        </div>
-      </div>
+    className={`flex flex-col h-screen coding-envi ${
+      theme === "dark" ? "dark" : ""
+    }`}
+    onMouseMove={handleMouseMove}
+    onMouseUp={handleMouseUp}
+  >
+      <TopBar
+        theme={theme}
+        leftSidebarOpen={leftSidebarOpen}
+        setLeftSidebarOpen={setLeftSidebarOpen}
+        rightSidebarOpen={rightSidebarOpen}
+        setRightSidebarOpen={setRightSidebarOpen}
+        rightSidebarTab={rightSidebarTab}
+        selectedLanguage={selectedLanguage}
+        setSelectedLanguage={setSelectedLanguage}
+        handleRunCode={() => handleRunCode()}
+        isLoading={isLoading}
+        showRunWithInput={showRunWithInput}
+        setShowRunWithInput={setShowRunWithInput}
+        toggleTheme={toggleTheme}
+        setVersionControlExpanded={setVersionControlExpanded}
+        versionControlExpanded={versionControlExpanded}
+        setSettingsExpanded={setSettingsExpanded}
+        settingsExpanded={settingsExpanded}
+        sessionId={sessionId}
+        languages={languages}
+      />
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar */}
-        <div
-          className={`border-r transition-all duration-300 ${
-            leftSidebarOpen ? "w-64" : "w-16"
-          }`}
-        >
-          <div className="h-full flex flex-col">
-            <div className="p-4 border-b">
-              <h2 className={`font-semibold ${!leftSidebarOpen && "sr-only"}`}>
-                Participants
-              </h2>
-            </div>
-            <ScrollArea className="flex-1 p-2">
-              {participants.map((participant) => {
-                const states =
-                  providerRef.current?.awareness?.getStates() || new Map();
-                const state = Array.from(states).find(
-                  ([_, s]) => s.user?.id === participant.uid
-                );
-                const clientId = state ? state[0] : null;
-                const isActive = activeEditors.has(clientId);
-                const livekitParticipant = livekitParticipants[participant.uid];
-                const micOn = livekitParticipant?.isMicrophoneEnabled || false;
-                const videoOn = livekitParticipant?.isCameraEnabled || false;
-                const displayName = participant.username || "Anonymous";
-                return (
-                  <div
-                    key={participant.uid}
-                    className={`participant-container ${
-                      isActive ? "active" : ""
-                    } flex items-center gap-2 p-2 rounded-md hover:bg-muted ${
-                      !leftSidebarOpen && "justify-center"
-                    }`}
-                  >
-                    <div className="relative">
-                      <Avatar
-                        className={isActive ? "border-2 border-green-500" : ""}
-                      >
-                        <AvatarImage
-                          src={participant.avatar}
-                          alt={displayName}
-                        />
-                        <AvatarFallback>
-                          {displayName
-                            .split(" ")
-                            .map((word) => word.charAt(0))
-                            .slice(0, 2)
-                            .join("")
-                            .toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                    </div>
-                    {leftSidebarOpen && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">{displayName}</span>
-                        <div className="flex gap-1">
-                          <span
-                            className={
-                              micOn ? "text-green-500" : "text-red-500"
-                            }
-                          >
-                            {micOn ? (
-                              <Mic className="h-4 w-4" />
-                            ) : (
-                              <MicOff className="h-4 w-4" />
-                            )}
-                          </span>
-                          <span
-                            className={
-                              videoOn ? "text-green-500" : "text-red-500"
-                            }
-                          >
-                            {videoOn ? (
-                              <Video className="h-4 w-4" />
-                            ) : (
-                              <VideoOff className="h-4 w-4" />
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </ScrollArea>
-          </div>
-        </div>
+        <LeftSidebar
+          theme={theme}
+          leftSidebarOpen={leftSidebarOpen}
+          participants={participants}
+          activeEditors={activeEditors}
+          livekitParticipants={livekitParticipants}
+          providerRef={providerRef}
+        />
 
         {/* Main Editor Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {!settingsExpanded && !versionControlExpanded && (
-            <div
-              className="flex-1 overflow-auto"
-              style={{
-                height: `calc(100% - ${
-                  notesHeight + (showRunWithInput ? 100 : 0)
-                }px)`,
-              }}
-            >
-              <Editor
-                height="100%"
-                language={selectedLanguage}
-                theme={monacoTheme}
-                onMount={handleEditorDidMount}
-                options={{
-                  minimap: { enabled: true },
-                  fontSize: fontSize,
-                  tabSize: tabSize,
-                  wordWrap: "on",
-                  automaticLayout: true,
-                  smoothScrolling: true,
-                  cursorBlinking: "smooth",
-                  cursorSmoothCaretAnimation: true,
-                  mouseWheelZoom: true,
-                  bracketPairColorization: { enabled: true },
-                  acceptSuggestionOnEnter: "on",
-                  lineNumbers: "on",
-                  renderWhitespace: "all",
-                  detectIndentation: false,
-                }}
-              />
-            </div>
-          )}
-
-          {showRunWithInput && !settingsExpanded && !versionControlExpanded && (
-            <div className="border-t h-[100px] p-4 flex items-center gap-2">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium">Input</h3>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowRunWithInput(false)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <Textarea
-                  className="w-full h-[60px] font-mono resize-none"
-                  placeholder="Enter input for your code..."
-                  value={codeInput}
-                  onChange={(e) => setCodeInput(e.target.value)}
-                />
-              </div>
-              <Button
-                className="bg-green-700 hover:bg-green-600 text-white h-10"
-                onClick={() => handleRunCode(codeInput)}
-                disabled={isLoading}
-              >
-                Run with Input
-              </Button>
-            </div>
-          )}
-
-          {settingsExpanded && (
-            <div className="flex-1 p-4 overflow-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Settings</h2>
-                <Button
-                  variant="ghost"
-                  className={`rounded-xl bg-transparent border border-gray-600 ${
-                    theme === "light"
-                      ? "hover:bg-gray-100 text-black"
-                      : "hover:bg-gray-800 text-white"
-                  }`}
-                  size="sm"
-                  onClick={() => setSettingsExpanded(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Editor Settings</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium">Theme</label>
-                      <Select value={theme} onValueChange={setTheme}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select theme" />
-                        </SelectTrigger>
-                        <SelectContent
-                          className={
-                            theme === "dark" ? "bg-gray-800" : "bg-white"
-                          }
-                        >
-                          <SelectItem
-                            value="light"
-                            className={`cursor-pointer text-white ${
-                              theme === "dark"
-                                ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
-                            }`}
-                          >
-                            Light
-                          </SelectItem>
-                          <SelectItem
-                            value="dark"
-                            className={`cursor-pointer text-white ${
-                              theme === "dark"
-                                ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
-                            }`}
-                          >
-                            Dark
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Font Size</label>
-                      <Select
-                        value={fontSize.toString()}
-                        onValueChange={(value) => setFontSize(parseInt(value))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select font size" />
-                        </SelectTrigger>
-                        <SelectContent
-                          className={
-                            theme === "dark" ? "bg-gray-800" : "bg-white"
-                          }
-                        >
-                          <SelectItem
-                            value="12"
-                            className={`cursor-pointer text-white ${
-                              theme === "dark"
-                                ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
-                            }`}
-                          >
-                            12px
-                          </SelectItem>
-                          <SelectItem
-                            value="14"
-                            className={`cursor-pointer text-white ${
-                              theme === "dark"
-                                ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
-                            }`}
-                          >
-                            14px
-                          </SelectItem>
-                          <SelectItem
-                            value="16"
-                            className={`cursor-pointer text-white ${
-                              theme === "dark"
-                                ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
-                            }`}
-                          >
-                            16px
-                          </SelectItem>
-                          <SelectItem
-                            value="18"
-                            className={`cursor-pointer text-white ${
-                              theme === "dark"
-                                ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
-                            }`}
-                          >
-                            18px
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium">Tab Size</label>
-                      <Select
-                        value={tabSize.toString()}
-                        onValueChange={(value) => setTabSize(parseInt(value))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select tab size" />
-                        </SelectTrigger>
-                        <SelectContent
-                          className={
-                            theme === "dark" ? "bg-gray-800" : "bg-white"
-                          }
-                        >
-                          <SelectItem
-                            value="2"
-                            className={`cursor-pointer text-white ${
-                              theme === "dark"
-                                ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
-                            }`}
-                          >
-                            2 spaces
-                          </SelectItem>
-                          <SelectItem
-                            value="4"
-                            className={`cursor-pointer text-white ${
-                              theme === "dark"
-                                ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
-                            }`}
-                          >
-                            4 spaces
-                          </SelectItem>
-                          <SelectItem
-                            value="8"
-                            className={`cursor-pointer text-white ${
-                              theme === "dark"
-                                ? "hover:bg-gray-600"
-                                : "hover:bg-gray-200 text-black"
-                            }`}
-                          >
-                            8 spaces
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {versionControlExpanded && (
-            <div className="flex-1 p-4 overflow-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Version Control</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={`rounded-xl bg-transparent border border-gray-600 ${
-                    theme === "light"
-                      ? "hover:bg-gray-100 text-black"
-                      : "hover:bg-gray-800 text-white"
-                  }`}
-                  onClick={() => setVersionControlExpanded(false)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Current Branch</h3>
-                  <div className="flex items-center gap-2">
-                    <GitBranch className="h-4 w-4" />
-                    <span className="font-medium">main</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-xl border border-gray-400"
-                    >
-                      Switch Branch
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!settingsExpanded && !versionControlExpanded && (
-            <div
-              className="border-t relative"
-              style={{ height: `${notesHeight}px` }}
-            >
-              <div
-                className="absolute top-0 left-0 right-0 h-1 bg-gray-500 cursor-ns-resize hover:bg-gray-700 transition-colors"
-                onMouseDown={handleResizeStart}
-              />
-              <div className="flex items-center justify-between p-2 border-b">
-                <div className="flex items-center gap-2">
-                  <Tabs defaultValue="output">
-                    <TabsList>
-                      <TabsTrigger className="rounded-lg" value="notes">
-                        Notes
-                      </TabsTrigger>
-                      <TabsTrigger className="rounded-lg" value="output">
-                        Output
-                      </TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="notes" className="m-0">
-                      <ScrollArea className="p-4 h-[calc(100%-45px)] overflow-auto font-mono text-sm">
-                        <Textarea
-                          className="w-full h-full resize-none"
-                          placeholder="Add your notes here..."
-                        />
-                      </ScrollArea>
-                    </TabsContent>
-                    <TabsContent value="output" className="m-0">
-                      <OutputPanel
-                        result={codeOutput}
-                        isLoading={isLoading}
-                        error={error}
-                        theme={theme}
-                        fetchTime={fetchTime}
-                        complexity={complexity}
-                      />
-                    </TabsContent>
-                  </Tabs>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <EditorArea
+          selectedLanguage={selectedLanguage}
+          theme={theme}
+          monacoTheme={monacoTheme}
+          fontSize={fontSize}
+          tabSize={tabSize}
+          showRunWithInput={showRunWithInput}
+          setShowRunWithInput={setShowRunWithInput}
+          codeInput={codeInput}
+          setCodeInput={setCodeInput}
+          notesHeight={notesHeight}
+          setNotesHeight={setNotesHeight}
+          isResizing={isResizing}
+          setIsResizing={setIsResizing}
+          settingsExpanded={settingsExpanded}
+          setSettingsExpanded={setSettingsExpanded}
+          versionControlExpanded={versionControlExpanded}
+          setVersionControlExpanded={setVersionControlExpanded}
+          codeOutput={codeOutput}
+          isLoading={isLoading}
+          error={error}
+          fetchTime={fetchTime}
+          complexity={complexity}
+          handleRunCode={handleRunCode}
+          handleEditorDidMount={handleEditorDidMount}
+        />
 
         {/* Right Sidebar */}
-        <div
-          className={`border-l transition-all duration-300 ${
-            rightSidebarOpen ? "w-64" : "w-0 overflow-hidden"
-          }`}
-        >
-          <Tabs
-            value={rightSidebarTab}
-            onValueChange={setRightSidebarTab}
-            className="h-full flex flex-col"
-          >
-            <div className="p-2 border-b">
-              <TabsList className="w-full">
-                <TabsTrigger value="video" className="flex-1 rounded-lg">
-                  Video
-                </TabsTrigger>
-                <TabsTrigger value="chat" className="flex-1 rounded-lg">
-                  Chat
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            <TabsContent
-              value="video"
-              className="flex-1 m-0 p-0 right-sidebar-content"
-            >
-              <div className="p-2 border-b">
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select layout" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="grid-1">1 per row</SelectItem>
-                    <SelectItem value="grid-2">2 per row</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <ScrollArea className="flex-1 p-2 h-[calc(100%-60px)]">
-                <div className="video-grid">
-                  {Object.entries(videoStreams).map(([sid, stream]) => (
-                    <div key={sid} className="video-wrapper">
-                      <video
-                        ref={(el) => {
-                          if (el) {
-                            videoRefs.current[sid] = el;
-                            el.srcObject = stream;
-                          }
-                        }}
-                        autoPlay
-                        playsInline
-                        muted={sid.includes(auth.currentUser?.uid)}
-                      />
-                      <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
-                        {sid.includes(auth.currentUser?.uid)
-                          ? "You"
-                          : participants.find((p) => sid.includes(p.uid))
-                              ?.username || "Unknown"}
-                      </div>
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 bg-background/80 hover:bg-background"
-                          onClick={() =>
-                            setPinnedVideo(pinnedVideo === sid ? null : sid)
-                          }
-                        >
-                          <PinIcon
-                            className={`h-3 w-3 ${
-                              theme === "light" ? "text-black" : "text-white"
-                            }`}
-                          />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-
-            <TabsContent
-              value="chat"
-              className="flex-1 m-0 p-0 right-sidebar-content"
-            >
-              <div className="chat-container" ref={chatContainerRef}>
-                <ScrollArea
-                  className="chat-messages"
-                  ref={chatMessagesRef}
-                  onScroll={handleChatScroll}
-                >
-                  {chatMessages.map((message, index) => {
-                    const isCurrentUser = message.senderId === auth.currentUser?.uid;
-                    return (
-                      <div
-                        key={message.id}
-                        className={`message ${isCurrentUser ? "sent" : "received"}`}
-                        data-message-index={index}
-                      >
-                        <div className="message-content">
-                          {!isCurrentUser && (
-                            <span className="sender">{message.senderName}</span>
-                          )}
-                          <p>{message.text}</p>
-                          <span className="timestamp">
-                            {new Date(message.timestamp).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </ScrollArea>
-                {newMessageCount > 0 && !isAtBottom && (
-                  <div className="new-messages-indicator">
-                    <div
-                      className="new-messages-button"
-                      onClick={scrollToBottom}
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                      {newMessageCount} new message{newMessageCount > 1 ? "s" : ""} //
-                    </div>
-                  </div>
-                )}
-                <div className="chat-input-container">
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Type a message..."
-                      className="flex-1"
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                    />
-                    <Button
-                      size="sm"
-                      className="rounded-lg bg-black text-white hover:bg-gray-900"
-                      onClick={handleSendMessage}
-                      disabled={!newMessage.trim()}
-                    >
-                      Send
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
+        <RightSidebar
+          theme={theme}
+          rightSidebarOpen={rightSidebarOpen}
+          rightSidebarTab={rightSidebarTab}
+          setRightSidebarTab={setRightSidebarTab}
+          videoStreams={videoStreams}
+          participants={participants}
+          pinnedVideo={pinnedVideo}
+          setPinnedVideo={setPinnedVideo}
+          auth={auth}
+          chatMessages={chatMessages}
+          newMessage={newMessage}
+          setNewMessage={setNewMessage}
+          handleSendMessage={handleSendMessage}
+          newMessageCount={newMessageCount}
+          isAtBottom={isAtBottom}
+          scrollToBottom={scrollToBottom}
+        />
       </div>
 
-      {/* Bottom Bar */}
-      <div className="flex items-center justify-center p-2 border-t">
-        <div className="flex items-center gap-4">
-          <Button
-            variant={micEnabled ? "default" : "outline"}
-            className={`rounded-full border border-gray-400 hover:bg-${
-              micEnabled ? "gray-100" : "gray-800"
-            } bg-${micEnabled ? "white" : "black"}`}
-            size="icon"
-            onClick={async () => {
-              if (room && room.localParticipant) {
-                try {
-                  await room.localParticipant.setMicrophoneEnabled(!micEnabled);
-                  setMicEnabled(!micEnabled);
-                } catch (error) {
-                  console.error("Error toggling mic:", error);
-                }
-              }
-            }}
-          >
-            {micEnabled ? (
-              <Mic
-                className={`h-7 w-7 text-${
-                  micEnabled ? "black" : "white"
-                } bg-transparent`}
-              />
-            ) : (
-              <MicOff
-                className={`h-7 w-7 bg-transparent text-${
-                  micEnabled ? "black" : "white"
-                }`}
-              />
-            )}
-          </Button>
-
-          <Button
-            variant={videoEnabled ? "default" : "outline"}
-            size="icon"
-            className={`rounded-full border border-gray-400 hover:bg-${
-              videoEnabled ? "gray-100" : "gray-800"
-            } bg-${videoEnabled ? "white" : "black"}`}
-            onClick={toggleVideo}
-          >
-            {videoEnabled ? (
-              <Video
-                className={`h-7 w-7 text-${
-                  videoEnabled ? "black" : "white"
-                } bg-transparent`}
-              />
-            ) : (
-              <VideoOff
-                className={`h-7 w-7 text-${
-                  videoEnabled ? "black" : "white"
-                } bg-transparent`}
-              />
-            )}
-          </Button>
-
-          <Button
-            variant="destructive"
-            size="sm"
-            className="rounded-lg bg-red-700 text-white hover:bg-red-600"
-            onClick={() => {
-              if (room) {
-                cleanupSession();
-                room.disconnect();
-              }
-              navigate("/");
-            }}
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Leave Session
-          </Button>
-        </div>
-      </div>
+      <BottomBar
+        theme={theme}
+        micEnabled={micEnabled}
+        setMicEnabled={setMicEnabled}
+        videoEnabled={videoEnabled}
+        toggleVideo={toggleVideo}
+        room={room}
+        cleanupSession={cleanupSession}
+        navigate={navigate}
+      />
 
       {/* Pinned Video */}
-      {pinnedVideo && videoStreams[pinnedVideo] && (
-        <div
-          ref={pinnedVideoRef}
-          className="absolute z-50 rounded-md bg-background border shadow-lg"
-          style={{
-            left: `${pinnedVideoPosition.x}px`,
-            top: `${pinnedVideoPosition.y}px`,
-            width: "240px",
-            height: "180px",
-          }}
-          onMouseDown={handleMouseDown}
-        >
-          <video
-            ref={(el) => {
-              if (el) {
-                videoRefs.current[pinnedVideo] = el;
-                el.srcObject = videoStreams[pinnedVideo];
-              }
-            }}
-            autoPlay
-            playsInline
-            muted={pinnedVideo.includes(auth.currentUser?.uid)}
-            className="w-full h-full object-cover rounded-md"
-          />
-          <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
-            {pinnedVideo.includes(auth.currentUser?.uid)
-              ? "You"
-              : participants.find((p) => pinnedVideo.includes(p.uid))
-                  ?.username || "Unknown"}
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-2 right-2 h-6 w-6 bg-background/80 hover:bg-background"
-            onClick={() => setPinnedVideo(null)}
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
-      )}
+      <PinnedVideo
+      pinnedVideo={pinnedVideo}
+      videoStreams={videoStreams}
+      participants={participants}
+      auth={auth}
+      pinnedVideoPosition={pinnedVideoPosition}
+      setPinnedVideoPosition={setPinnedVideoPosition}
+      setPinnedVideo={setPinnedVideo}
+      videoRefs={videoRefs}
+      isDragging={isDragging}
+      setIsDragging={setIsDragging}
+      dragOffset={dragOffset}
+      setDragOffset={setDragOffset}
+    />
     </div>
   );
 };

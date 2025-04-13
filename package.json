@@ -50,6 +50,7 @@
     "cmdk": "1.0.4",
     "embla-carousel-react": "8.5.1",
     "firebase": "^11.6.0",
+    "framer-motion": "^12.6.5",
     "input-otp": "1.4.1",
     "livekit-client": "^2.10.0",
     "lucide-react": "^0.486.0",
