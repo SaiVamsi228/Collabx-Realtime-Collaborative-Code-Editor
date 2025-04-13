@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { PinIcon } from "lucide-react";
+import { PinIcon } from "lucide-react"; //
 
 const PinnedVideo = ({
   pinnedVideo,
