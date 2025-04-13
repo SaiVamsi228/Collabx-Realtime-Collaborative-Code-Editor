@@ -305,11 +305,18 @@ const CodingEnvi = () => {
 
   useEffect(() => {
     if (!auth.currentUser || !sessionId) return;
-    const unsubscribe = onSnapshot(doc(db, "sessions", sessionId), (doc) => {
-      if (doc.exists()) {
-        setParticipants(doc.data().participants || []);
+    const unsubscribe = onSnapshot(
+      doc(db, "sessions", sessionId),
+      (doc) => {
+        if (doc.exists()) {
+          setParticipants(doc.data().participants || []);
+        }
+      },
+      (error) => {
+        console.error("Firestore session listener error:", error);
+        setError("Failed to load session data. Please try again.");
       }
-    });
+    );
     return () => unsubscribe();
   }, [sessionId]);
 
@@ -317,21 +324,28 @@ const CodingEnvi = () => {
     if (!auth.currentUser || !sessionId) return;
     const messagesRef = collection(db, "sessions", sessionId, "messages");
     const q = query(messagesRef, orderBy("timestamp", "asc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const messages = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setChatMessages(messages);
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const messages = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setChatMessages(messages);
 
-      if (chatMessagesRef.current && isAtBottom) {
-        setTimeout(() => {
-          chatMessagesRef.current.scrollTop = 0;
-        }, 0);
-      } else {
-        setNewMessageCount((prev) => prev + snapshot.docChanges().length);
+        if (chatMessagesRef.current && isAtBottom) {
+          setTimeout(() => {
+            chatMessagesRef.current.scrollTop = 0;
+          }, 0);
+        } else {
+          setNewMessageCount((prev) => prev + snapshot.docChanges().length);
+        }
+      },
+      (error) => {
+        console.error("Firestore messages listener error:", error);
+        setError("Failed to load chat messages. Please try again.");
       }
-    });
+    );
     return () => unsubscribe();
   }, [sessionId, isAtBottom]);
 
@@ -356,7 +370,7 @@ const CodingEnvi = () => {
     // Process local participant tracks
     if (room.localParticipant.tracks) {
       room.localParticipant.tracks.forEach((publication) => {
-        if (publication.track) { // Removed isSubscribed check for local tracks
+        if (publication.track) {
           if (publication.kind === "video") {
             newStates[room.localParticipant.identity] = {
               ...newStates[room.localParticipant.identity],
@@ -446,7 +460,6 @@ const CodingEnvi = () => {
         },
       });
 
-      // Connect to LiveKit server
       await room.connect(
         "wss://video-chat-application-7u5wc7ae.livekit.cloud",
         token,
@@ -456,7 +469,6 @@ const CodingEnvi = () => {
       );
       console.log("Successfully connected to room");
 
-      // Set metadata after connection
       try {
         await room.localParticipant.setMetadata(
           JSON.stringify({
@@ -468,17 +480,13 @@ const CodingEnvi = () => {
         console.log("Participant metadata set");
       } catch (metadataError) {
         console.warn("Failed to set metadata:", metadataError.message);
-        // Continue despite metadata error
       }
 
-      // Set room state
       setRoom(room);
       setConnectionStatus("connected");
 
-      // Initialize tracks
       initializeExistingTracks(room);
 
-      // Disable mic and camera by default
       try {
         await room.localParticipant.setMicrophoneEnabled(false);
         await room.localParticipant.setCameraEnabled(false);
@@ -490,12 +498,11 @@ const CodingEnvi = () => {
       setConnectionStatus("disconnected");
 
       if (retryCount < maxRetries && error.message.includes("could not establish pc connection")) {
-        const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
+        const delay = Math.pow(2, retryCount) * 1000;
         console.log(`Retrying in ${delay}ms...`);
         setTimeout(() => joinRoom(retryCount + 1, maxRetries), delay);
       } else {
         console.error("Max retries reached or non-retryable error");
-        // Optionally notify user of failure
         setError("Failed to connect to video chat. Please try again later.");
       }
     }
@@ -522,7 +529,6 @@ const CodingEnvi = () => {
     videoRefs.current = {};
     setPinnedVideo(null);
 
-    // Clean up Yjs resources safely
     if (bindingRef.current) {
       bindingRef.current.destroy();
       bindingRef.current = null;
@@ -554,7 +560,6 @@ const CodingEnvi = () => {
         },
       }));
 
-      // Process any existing tracks for the new participant
       if (participant.tracks) {
         participant.tracks.forEach((publication) => {
           if (publication.track && publication.isSubscribed) {
@@ -1000,7 +1005,7 @@ const CodingEnvi = () => {
   const toggleVideo = async () => {
     if (!room || !room.localParticipant || room.state !== "connected") {
       console.error("Cannot toggle video: Room not connected or participant unavailable");
-      setVideoEnabled(false); // Ensure UI reflects disconnected state
+      setVideoEnabled(false);
       return;
     }
 
@@ -1035,14 +1040,18 @@ const CodingEnvi = () => {
         }
       } else {
         console.log("Disabling video...");
-        const videoPublication = Array.from(
-          room.localParticipant.videoTracks.values()
-        ).find((pub) => pub.source === LivekitClient.Track.Source.Camera);
+        // Use tracks instead of videoTracks to avoid undefined error
+        const videoPublication = room.localParticipant.tracks
+          ? Array.from(room.localParticipant.tracks.values()).find(
+              (pub) => pub.kind === "video" && pub.source === LivekitClient.Track.Source.Camera
+            )
+          : null;
 
         if (videoPublication && videoPublication.track) {
           const track = videoPublication.track;
           const trackSid = videoPublication.trackSid;
 
+          console.log("Found video track to unpublish:", trackSid);
           await room.localParticipant.unpublishTrack(track);
           console.log("Video track unpublished:", trackSid);
 
@@ -1087,9 +1096,11 @@ const CodingEnvi = () => {
         setMicEnabled(true);
       } else {
         console.log("Disabling mic...");
-        const audioPublication = Array.from(
-          room.localParticipant.audioTracks.values()
-        ).find((pub) => pub.source === LivekitClient.Track.Source.Microphone);
+        const audioPublication = room.localParticipant.tracks
+          ? Array.from(room.localParticipant.tracks.values()).find(
+              (pub) => pub.kind === "audio" && pub.source === LivekitClient.Track.Source.Microphone
+            )
+          : null;
         if (audioPublication && audioPublication.track) {
           await room.localParticipant.unpublishTrack(audioPublication.track);
           audioPublication.track.stop();
