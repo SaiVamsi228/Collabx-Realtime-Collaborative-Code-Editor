@@ -336,6 +336,11 @@ const CodingEnvi = () => {
   }, [sessionId, isAtBottom]);
 
   const initializeExistingTracks = (room) => {
+    if (!room || !room.localParticipant) {
+      console.error("Cannot initialize tracks: Room or local participant not available");
+      return;
+    }
+
     const newStates = { ...participantStates };
 
     // Initialize local participant
@@ -349,48 +354,12 @@ const CodingEnvi = () => {
     };
 
     // Process local participant tracks
-    room.localParticipant.tracks.forEach((publication) => {
-      if (publication.track && publication.isSubscribed) {
-        if (publication.kind === "video") {
-          newStates[room.localParticipant.identity] = {
-            ...newStates[room.localParticipant.identity],
-            videoEnabled: true,
-            stream: publication.track.mediaStream,
-            trackSid: publication.trackSid,
-          };
-          if (videoRefs.current[publication.trackSid]) {
-            videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
-            videoRefs.current[publication.trackSid].play().catch((e) =>
-              console.error("Local video play failed:", e)
-            );
-          }
-        } else if (publication.kind === "audio") {
-          newStates[room.localParticipant.identity] = {
-            ...newStates[room.localParticipant.identity],
-            audioEnabled: true,
-            audioTrackSid: publication.trackSid,
-          };
-          // Do not attach local audio to prevent feedback
-        }
-      }
-    });
-
-    // Process remote participants
-    room.participants.forEach((participant) => {
-      newStates[participant.identity] = {
-        identity: participant.identity,
-        videoEnabled: false,
-        audioEnabled: false,
-        stream: null,
-        trackSid: null,
-        audioTrackSid: null,
-      };
-
-      participant.tracks.forEach((publication) => {
-        if (publication.track && publication.isSubscribed) {
+    if (room.localParticipant.tracks) {
+      room.localParticipant.tracks.forEach((publication) => {
+        if (publication.track) { // Removed isSubscribed check for local tracks
           if (publication.kind === "video") {
-            newStates[participant.identity] = {
-              ...newStates[participant.identity],
+            newStates[room.localParticipant.identity] = {
+              ...newStates[room.localParticipant.identity],
               videoEnabled: true,
               stream: publication.track.mediaStream,
               trackSid: publication.trackSid,
@@ -398,28 +367,76 @@ const CodingEnvi = () => {
             if (videoRefs.current[publication.trackSid]) {
               videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
               videoRefs.current[publication.trackSid].play().catch((e) =>
-                console.error("Remote video play failed:", e)
+                console.error("Local video play failed:", e)
               );
             }
           } else if (publication.kind === "audio") {
-            newStates[participant.identity] = {
-              ...newStates[participant.identity],
+            newStates[room.localParticipant.identity] = {
+              ...newStates[room.localParticipant.identity],
               audioEnabled: true,
               audioTrackSid: publication.trackSid,
             };
-            publication.track.attach();
+            // Do not attach local audio to prevent feedback
           }
         }
       });
-    });
+    }
+
+    // Process remote participants
+    if (room.participants) {
+      room.participants.forEach((participant) => {
+        newStates[participant.identity] = {
+          identity: participant.identity,
+          videoEnabled: false,
+          audioEnabled: false,
+          stream: null,
+          trackSid: null,
+          audioTrackSid: null,
+        };
+
+        if (participant.tracks) {
+          participant.tracks.forEach((publication) => {
+            if (publication.track && publication.isSubscribed) {
+              if (publication.kind === "video") {
+                newStates[participant.identity] = {
+                  ...newStates[participant.identity],
+                  videoEnabled: true,
+                  stream: publication.track.mediaStream,
+                  trackSid: publication.trackSid,
+                };
+                if (videoRefs.current[publication.trackSid]) {
+                  videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
+                  videoRefs.current[publication.trackSid].play().catch((e) =>
+                    console.error("Remote video play failed:", e)
+                  );
+                }
+              } else if (publication.kind === "audio") {
+                newStates[participant.identity] = {
+                  ...newStates[participant.identity],
+                  audioEnabled: true,
+                  audioTrackSid: publication.trackSid,
+                };
+                publication.track.attach();
+              }
+            }
+          });
+        }
+      });
+    }
 
     setParticipantStates(newStates);
   };
 
-  const joinRoom = async () => {
-    if (!auth.currentUser || !sessionId) return;
+  const joinRoom = async (retryCount = 0, maxRetries = 3) => {
+    if (!auth.currentUser || !sessionId) {
+      console.error("Cannot join room: Missing auth or sessionId");
+      return;
+    }
+
     try {
       setConnectionStatus("connecting");
+      console.log(`Attempting to join room, attempt ${retryCount + 1}/${maxRetries}`);
+
       const token = await getLiveKitToken(sessionId, auth.currentUser.uid);
       const room = new LivekitClient.Room({
         adaptiveStream: true,
@@ -429,31 +446,58 @@ const CodingEnvi = () => {
         },
       });
 
+      // Connect to LiveKit server
       await room.connect(
         "wss://video-chat-application-7u5wc7ae.livekit.cloud",
-        token
+        token,
+        {
+          autoSubscribe: true,
+        }
       );
+      console.log("Successfully connected to room");
 
-      room.localParticipant.setMetadata(
-        JSON.stringify({
-          displayName:
-            auth.currentUser.displayName ||
-            "User" + Math.floor(Math.random() * 1000),
-        })
-      );
+      // Set metadata after connection
+      try {
+        await room.localParticipant.setMetadata(
+          JSON.stringify({
+            displayName:
+              auth.currentUser.displayName ||
+              "User" + Math.floor(Math.random() * 1000),
+          })
+        );
+        console.log("Participant metadata set");
+      } catch (metadataError) {
+        console.warn("Failed to set metadata:", metadataError.message);
+        // Continue despite metadata error
+      }
 
+      // Set room state
       setRoom(room);
       setConnectionStatus("connected");
 
-      // Initialize existing tracks for all participants
+      // Initialize tracks
       initializeExistingTracks(room);
 
-      await room.localParticipant.setMicrophoneEnabled(false);
-      await room.localParticipant.setCameraEnabled(false);
+      // Disable mic and camera by default
+      try {
+        await room.localParticipant.setMicrophoneEnabled(false);
+        await room.localParticipant.setCameraEnabled(false);
+      } catch (error) {
+        console.warn("Failed to disable mic/camera:", error.message);
+      }
     } catch (error) {
       console.error("Failed to join room:", error);
       setConnectionStatus("disconnected");
-      setTimeout(joinRoom, 5000);
+
+      if (retryCount < maxRetries && error.message.includes("could not establish pc connection")) {
+        const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
+        console.log(`Retrying in ${delay}ms...`);
+        setTimeout(() => joinRoom(retryCount + 1, maxRetries), delay);
+      } else {
+        console.error("Max retries reached or non-retryable error");
+        // Optionally notify user of failure
+        setError("Failed to connect to video chat. Please try again later.");
+      }
     }
   };
 
@@ -478,9 +522,20 @@ const CodingEnvi = () => {
     videoRefs.current = {};
     setPinnedVideo(null);
 
-    if (bindingRef.current) bindingRef.current.destroy();
-    if (providerRef.current) providerRef.current.destroy();
-    if (yDocRef.current) yDocRef.current.destroy();
+    // Clean up Yjs resources safely
+    if (bindingRef.current) {
+      bindingRef.current.destroy();
+      bindingRef.current = null;
+    }
+    if (providerRef.current) {
+      providerRef.current.destroy();
+      providerRef.current = null;
+    }
+    if (yDocRef.current) {
+      yDocRef.current.destroy();
+      yDocRef.current = null;
+    }
+    editTimeouts.current.clear();
   };
 
   useEffect(() => {
@@ -500,37 +555,39 @@ const CodingEnvi = () => {
       }));
 
       // Process any existing tracks for the new participant
-      participant.tracks.forEach((publication) => {
-        if (publication.track && publication.isSubscribed) {
-          if (publication.kind === "video") {
-            setParticipantStates((prev) => ({
-              ...prev,
-              [participant.identity]: {
-                ...prev[participant.identity],
-                videoEnabled: true,
-                stream: publication.track.mediaStream,
-                trackSid: publication.trackSid,
-              },
-            }));
-            if (videoRefs.current[publication.trackSid]) {
-              videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
-              videoRefs.current[publication.trackSid].play().catch((e) =>
-                console.error("Video play failed:", e)
-              );
+      if (participant.tracks) {
+        participant.tracks.forEach((publication) => {
+          if (publication.track && publication.isSubscribed) {
+            if (publication.kind === "video") {
+              setParticipantStates((prev) => ({
+                ...prev,
+                [participant.identity]: {
+                  ...prev[participant.identity],
+                  videoEnabled: true,
+                  stream: publication.track.mediaStream,
+                  trackSid: publication.trackSid,
+                },
+              }));
+              if (videoRefs.current[publication.trackSid]) {
+                videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
+                videoRefs.current[publication.trackSid].play().catch((e) =>
+                  console.error("Video play failed:", e)
+                );
+              }
+            } else if (publication.kind === "audio") {
+              setParticipantStates((prev) => ({
+                ...prev,
+                [participant.identity]: {
+                  ...prev[participant.identity],
+                  audioEnabled: true,
+                  audioTrackSid: publication.trackSid,
+                },
+              }));
+              publication.track.attach();
             }
-          } else if (publication.kind === "audio") {
-            setParticipantStates((prev) => ({
-              ...prev,
-              [participant.identity]: {
-                ...prev[participant.identity],
-                audioEnabled: true,
-                audioTrackSid: publication.trackSid,
-              },
-            }));
-            publication.track.attach();
           }
-        }
-      });
+        });
+      }
     };
 
     const handleParticipantDisconnected = (participant) => {
@@ -657,6 +714,7 @@ const CodingEnvi = () => {
     };
 
     const handleDisconnected = () => {
+      console.log("Room disconnected, attempting to reconnect...");
       setConnectionStatus("disconnected");
       cleanupSession();
       joinRoom();
@@ -940,14 +998,14 @@ const CodingEnvi = () => {
   };
 
   const toggleVideo = async () => {
-    if (!room || !room.localParticipant) {
-      console.error("Cannot toggle video: Room or local participant not available");
+    if (!room || !room.localParticipant || room.state !== "connected") {
+      console.error("Cannot toggle video: Room not connected or participant unavailable");
+      setVideoEnabled(false); // Ensure UI reflects disconnected state
       return;
     }
 
     try {
       if (!videoEnabled) {
-        // Enable video
         console.log("Enabling video...");
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -961,16 +1019,13 @@ const CodingEnvi = () => {
           throw new Error("No video track available");
         }
 
-        // Publish the track
         const publication = await room.localParticipant.publishTrack(videoTrack, {
           source: LivekitClient.Track.Source.Camera,
         });
         console.log("Video track published:", publication.trackSid);
 
-        // Update state only after successful publish
         setVideoEnabled(true);
 
-        // Clean up any existing video refs that might be stale
         const currentSid = publication.trackSid;
         if (videoRefs.current[currentSid]) {
           videoRefs.current[currentSid].srcObject = stream;
@@ -979,7 +1034,6 @@ const CodingEnvi = () => {
           );
         }
       } else {
-        // Disable video
         console.log("Disabling video...");
         const videoPublication = Array.from(
           room.localParticipant.videoTracks.values()
@@ -989,46 +1043,42 @@ const CodingEnvi = () => {
           const track = videoPublication.track;
           const trackSid = videoPublication.trackSid;
 
-          // Unpublish the track
           await room.localParticipant.unpublishTrack(track);
           console.log("Video track unpublished:", trackSid);
 
-          // Stop the track and clean up the stream
           track.stop();
           const stream = track.mediaStream;
           if (stream) {
             stream.getTracks().forEach((t) => t.stop());
           }
 
-          // Clear the video element
           if (videoRefs.current[trackSid]) {
             videoRefs.current[trackSid].srcObject = null;
             delete videoRefs.current[trackSid];
           }
 
-          // Update state only after successful unpublish
           setVideoEnabled(false);
         } else {
           console.warn("No video track found to unpublish");
-          // If no track is found but videoEnabled is true, correct the state
           setVideoEnabled(false);
         }
       }
     } catch (error) {
       console.error("Error toggling video:", error);
-      // Reset state to false if enabling fails
-      if (videoEnabled) {
-        // If we were trying to disable and failed, don't change state
-        return;
-      }
       setVideoEnabled(false);
     }
   };
 
   const toggleMic = async () => {
-    if (!room || !room.localParticipant) return;
+    if (!room || !room.localParticipant || room.state !== "connected") {
+      console.error("Cannot toggle mic: Room not connected or participant unavailable");
+      setMicEnabled(false);
+      return;
+    }
+
     try {
       if (!micEnabled) {
+        console.log("Enabling mic...");
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
@@ -1036,12 +1086,16 @@ const CodingEnvi = () => {
         await room.localParticipant.publishTrack(audioTrack);
         setMicEnabled(true);
       } else {
+        console.log("Disabling mic...");
         const audioPublication = Array.from(
           room.localParticipant.audioTracks.values()
         ).find((pub) => pub.source === LivekitClient.Track.Source.Microphone);
         if (audioPublication && audioPublication.track) {
           await room.localParticipant.unpublishTrack(audioPublication.track);
           audioPublication.track.stop();
+          setMicEnabled(false);
+        } else {
+          console.warn("No audio track found to unpublish");
           setMicEnabled(false);
         }
       }
