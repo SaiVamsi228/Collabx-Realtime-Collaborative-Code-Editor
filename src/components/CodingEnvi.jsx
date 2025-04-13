@@ -24,6 +24,7 @@ import {
 } from "firebase/firestore";
 import * as LivekitClient from "livekit-client";
 
+// Styles remain unchanged
 const styles = `
   .participant-container {
     position: relative;
@@ -553,7 +554,7 @@ const CodingEnvi = () => {
           },
         }));
         if (videoRefs.current[track.sid]) {
-          videoRefs.current[track.sid].srcObject = BUDtrack.mediaStream;
+          videoRefs.current[track.sid].srcObject = track.mediaStream;
           videoRefs.current[track.sid].play().catch((e) =>
             console.error("Video play failed:", e)
           );
@@ -939,27 +940,87 @@ const CodingEnvi = () => {
   };
 
   const toggleVideo = async () => {
-    if (!room || !room.localParticipant) return;
+    if (!room || !room.localParticipant) {
+      console.error("Cannot toggle video: Room or local participant not available");
+      return;
+    }
+
     try {
       if (!videoEnabled) {
+        // Enable video
+        console.log("Enabling video...");
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 },
+          },
         });
         const videoTrack = stream.getVideoTracks()[0];
-        await room.localParticipant.publishTrack(videoTrack);
+        if (!videoTrack) {
+          throw new Error("No video track available");
+        }
+
+        // Publish the track
+        const publication = await room.localParticipant.publishTrack(videoTrack, {
+          source: LivekitClient.Track.Source.Camera,
+        });
+        console.log("Video track published:", publication.trackSid);
+
+        // Update state only after successful publish
         setVideoEnabled(true);
+
+        // Clean up any existing video refs that might be stale
+        const currentSid = publication.trackSid;
+        if (videoRefs.current[currentSid]) {
+          videoRefs.current[currentSid].srcObject = stream;
+          videoRefs.current[currentSid].play().catch((e) =>
+            console.error("Video play failed:", e)
+          );
+        }
       } else {
+        // Disable video
+        console.log("Disabling video...");
         const videoPublication = Array.from(
           room.localParticipant.videoTracks.values()
         ).find((pub) => pub.source === LivekitClient.Track.Source.Camera);
+
         if (videoPublication && videoPublication.track) {
-          await room.localParticipant.unpublishTrack(videoPublication.track);
-          videoPublication.track.stop();
+          const track = videoPublication.track;
+          const trackSid = videoPublication.trackSid;
+
+          // Unpublish the track
+          await room.localParticipant.unpublishTrack(track);
+          console.log("Video track unpublished:", trackSid);
+
+          // Stop the track and clean up the stream
+          track.stop();
+          const stream = track.mediaStream;
+          if (stream) {
+            stream.getTracks().forEach((t) => t.stop());
+          }
+
+          // Clear the video element
+          if (videoRefs.current[trackSid]) {
+            videoRefs.current[trackSid].srcObject = null;
+            delete videoRefs.current[trackSid];
+          }
+
+          // Update state only after successful unpublish
+          setVideoEnabled(false);
+        } else {
+          console.warn("No video track found to unpublish");
+          // If no track is found but videoEnabled is true, correct the state
           setVideoEnabled(false);
         }
       }
     } catch (error) {
       console.error("Error toggling video:", error);
+      // Reset state to false if enabling fails
+      if (videoEnabled) {
+        // If we were trying to disable and failed, don't change state
+        return;
+      }
       setVideoEnabled(false);
     }
   };
