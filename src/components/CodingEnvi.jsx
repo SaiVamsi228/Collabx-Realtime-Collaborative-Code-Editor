@@ -62,6 +62,8 @@ const styles = `
     padding-bottom: 56.25%;
     height: 0;
     width: 100%;
+    background-color: #333;
+    border-radius: 4px;
   }
   
   .video-wrapper video {
@@ -72,7 +74,21 @@ const styles = `
     height: 100%;
     object-fit: cover;
     border-radius: 4px;
+  }
+
+  .video-off-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background-color: #333;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 14px;
   }
 
   .right-sidebar-content {
@@ -244,7 +260,7 @@ const CodingEnvi = () => {
   const [complexity, setComplexity] = useState(null);
   const [room, setRoom] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
-  const [videoStreams, setVideoStreams] = useState({});
+  const [participantStates, setParticipantStates] = useState({}); // Tracks video state per participant
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
@@ -347,6 +363,17 @@ const CodingEnvi = () => {
       setRoom(room);
       setConnectionStatus("connected");
 
+      // Initialize participant state for local user
+      setParticipantStates((prev) => ({
+        ...prev,
+        [room.localParticipant.identity]: {
+          identity: room.localParticipant.identity,
+          videoEnabled: false,
+          stream: null,
+          trackSid: null,
+        },
+      }));
+
       await room.localParticipant.setMicrophoneEnabled(false);
       await room.localParticipant.setCameraEnabled(false);
     } catch (error) {
@@ -368,7 +395,7 @@ const CodingEnvi = () => {
   }, [sessionId]);
 
   const cleanupSession = () => {
-    setVideoStreams({});
+    setParticipantStates({});
     Object.keys(videoRefs.current).forEach((sid) => {
       if (videoRefs.current[sid]) {
         videoRefs.current[sid].srcObject = null;
@@ -385,15 +412,43 @@ const CodingEnvi = () => {
   useEffect(() => {
     if (!room) return;
 
+    const handleParticipantConnected = (participant) => {
+      setParticipantStates((prev) => ({
+        ...prev,
+        [participant.identity]: {
+          identity: participant.identity,
+          videoEnabled: false,
+          stream: null,
+          trackSid: null,
+        },
+      }));
+    };
+
+    const handleParticipantDisconnected = (participant) => {
+      setParticipantStates((prev) => {
+        const newStates = { ...prev };
+        delete newStates[participant.identity];
+        return newStates;
+      });
+      if (pinnedVideo === participant.identity) setPinnedVideo(null);
+    };
+
     const handleTrackSubscribed = (track, publication, participant) => {
       if (track.kind === "video") {
-        const stream = track.mediaStream;
-        setVideoStreams((prev) => ({
+        setParticipantStates((prev) => ({
           ...prev,
-          [track.sid]: { stream, participantIdentity: participant.identity },
+          [participant.identity]: {
+            ...prev[participant.identity],
+            videoEnabled: true,
+            stream: track.mediaStream,
+            trackSid: track.sid,
+          },
         }));
         if (videoRefs.current[track.sid]) {
-          videoRefs.current[track.sid].srcObject = stream;
+          videoRefs.current[track.sid].srcObject = track.mediaStream;
+          videoRefs.current[track.sid].play().catch((e) =>
+            console.error("Video play failed:", e)
+          );
         }
       }
       if (track.kind === "audio") {
@@ -401,14 +456,17 @@ const CodingEnvi = () => {
       }
     };
 
-    const handleTrackUnsubscribed = (track) => {
+    const handleTrackUnsubscribed = (track, publication, participant) => {
       if (track.kind === "video") {
-        setVideoStreams((prev) => {
-          const newStreams = { ...prev };
-          delete newStreams[track.sid];
-          if (pinnedVideo === track.sid) setPinnedVideo(null);
-          return newStreams;
-        });
+        setParticipantStates((prev) => ({
+          ...prev,
+          [participant.identity]: {
+            ...prev[participant.identity],
+            videoEnabled: false,
+            stream: null,
+            trackSid: null,
+          },
+        }));
         if (videoRefs.current[track.sid]) {
           videoRefs.current[track.sid].srcObject = null;
         }
@@ -420,16 +478,21 @@ const CodingEnvi = () => {
 
     const handleLocalTrackPublished = (publication) => {
       if (publication.track.kind === "video") {
-        setVideoStreams((prev) => ({
+        setParticipantStates((prev) => ({
           ...prev,
-          [publication.trackSid]: {
+          [room.localParticipant.identity]: {
+            ...prev[room.localParticipant.identity],
+            videoEnabled: true,
             stream: publication.track.mediaStream,
-            participantIdentity: room.localParticipant.identity,
+            trackSid: publication.trackSid,
           },
         }));
         if (videoRefs.current[publication.trackSid]) {
           videoRefs.current[publication.trackSid].srcObject =
             publication.track.mediaStream;
+          videoRefs.current[publication.trackSid].play().catch((e) =>
+            console.error("Video play failed:", e)
+          );
         }
       }
       if (publication.track.kind === "audio") {
@@ -439,12 +502,15 @@ const CodingEnvi = () => {
 
     const handleLocalTrackUnpublished = (publication) => {
       if (publication.track.kind === "video") {
-        setVideoStreams((prev) => {
-          const newStreams = { ...prev };
-          delete newStreams[publication.trackSid];
-          if (pinnedVideo === publication.trackSid) setPinnedVideo(null);
-          return newStreams;
-        });
+        setParticipantStates((prev) => ({
+          ...prev,
+          [room.localParticipant.identity]: {
+            ...prev[room.localParticipant.identity],
+            videoEnabled: false,
+            stream: null,
+            trackSid: null,
+          },
+        }));
         if (videoRefs.current[publication.trackSid]) {
           videoRefs.current[publication.trackSid].srcObject = null;
         }
@@ -460,6 +526,8 @@ const CodingEnvi = () => {
       joinRoom();
     };
 
+    room.on("participantConnected", handleParticipantConnected);
+    room.on("participantDisconnected", handleParticipantDisconnected);
     room.on("trackSubscribed", handleTrackSubscribed);
     room.on("trackUnsubscribed", handleTrackUnsubscribed);
     room.on("localTrackPublished", handleLocalTrackPublished);
@@ -467,6 +535,8 @@ const CodingEnvi = () => {
     room.on("disconnected", handleDisconnected);
 
     return () => {
+      room.off("participantConnected", handleParticipantConnected);
+      room.off("participantDisconnected", handleParticipantDisconnected);
       room.off("trackSubscribed", handleTrackSubscribed);
       room.off("trackUnsubscribed", handleTrackUnsubscribed);
       room.off("localTrackPublished", handleLocalTrackPublished);
@@ -678,17 +748,11 @@ const CodingEnvi = () => {
     if (isDragging) {
       const newX = Math.max(
         0,
-        Math.min(
-          e.clientX - dragOffset.x,
-          window.innerWidth - 240
-        )
+        Math.min(e.clientX - dragOffset.x, window.innerWidth - 240)
       );
       const newY = Math.max(
         0,
-        Math.min(
-          e.clientY - dragOffset.y,
-          window.innerHeight - 180
-        )
+        Math.min(e.clientY - dragOffset.y, window.innerHeight - 180)
       );
       setPinnedVideoPosition({ x: newX, y: newY });
     }
@@ -750,12 +814,12 @@ const CodingEnvi = () => {
           await room.localParticipant.publishTrack(videoTrack);
           setVideoEnabled(true);
         } else {
-          const videoTrack = Array.from(
+          const videoPublication = Array.from(
             room.localParticipant.videoTracks.values()
           ).find((pub) => pub.source === LivekitClient.Track.Source.Camera);
-          if (videoTrack) {
-            await room.localParticipant.unpublishTrack(videoTrack.track);
-            videoTrack.track.stop();
+          if (videoPublication && videoPublication.track) {
+            await room.localParticipant.unpublishTrack(videoPublication.track);
+            videoPublication.track.stop();
           }
           setVideoEnabled(false);
         }
@@ -777,12 +841,12 @@ const CodingEnvi = () => {
           await room.localParticipant.publishTrack(audioTrack);
           setMicEnabled(true);
         } else {
-          const audioTrack = Array.from(
+          const audioPublication = Array.from(
             room.localParticipant.audioTracks.values()
           ).find((pub) => pub.source === LivekitClient.Track.Source.Microphone);
-          if (audioTrack) {
-            await room.localParticipant.unpublishTrack(audioTrack.track);
-            audioTrack.track.stop();
+          if (audioPublication && audioPublication.track) {
+            await room.localParticipant.unpublishTrack(audioPublication.track);
+            audioPublication.track.stop();
           }
           setMicEnabled(false);
         }
@@ -884,8 +948,8 @@ const CodingEnvi = () => {
           rightSidebarOpen={rightSidebarOpen}
           rightSidebarTab={rightSidebarTab}
           setRightSidebarTab={setRightSidebarTab}
-          videoStreams={videoStreams}
-          participants={participants}
+          participantStates={participantStates}
+          livekitParticipants={livekitParticipants}
           pinnedVideo={pinnedVideo}
           setPinnedVideo={setPinnedVideo}
           auth={auth}
@@ -896,7 +960,7 @@ const CodingEnvi = () => {
           newMessageCount={newMessageCount}
           isAtBottom={isAtBottom}
           scrollToBottom={scrollToBottom}
-          livekitParticipants={livekitParticipants}
+          videoRefs={videoRefs}
         />
       </div>
 
@@ -913,8 +977,8 @@ const CodingEnvi = () => {
 
       <PinnedVideo
         pinnedVideo={pinnedVideo}
-        videoStreams={videoStreams}
-        participants={participants}
+        participantStates={participantStates}
+        livekitParticipants={livekitParticipants}
         auth={auth}
         pinnedVideoPosition={pinnedVideoPosition}
         setPinnedVideoPosition={setPinnedVideoPosition}
@@ -924,7 +988,6 @@ const CodingEnvi = () => {
         setIsDragging={setIsDragging}
         dragOffset={dragOffset}
         setDragOffset={setDragOffset}
-        livekitParticipants={livekitParticipants}
       />
     </div>
   );

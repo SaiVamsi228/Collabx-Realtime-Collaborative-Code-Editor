@@ -1,10 +1,10 @@
 import { useRef } from "react";
-import { PinIcon } from "lucide-react"; //
+import { PinIcon, VideoOff } from "lucide-react";
 
 const PinnedVideo = ({
   pinnedVideo,
-  videoStreams,
-  participants,
+  participantStates,
+  livekitParticipants,
   auth,
   pinnedVideoPosition,
   setPinnedVideoPosition,
@@ -14,7 +14,6 @@ const PinnedVideo = ({
   setIsDragging,
   dragOffset,
   setDragOffset,
-  livekitParticipants,
 }) => {
   const pinnedVideoRef = useRef(null);
 
@@ -40,11 +39,11 @@ const PinnedVideo = ({
     }
   };
 
-  if (!pinnedVideo || !videoStreams[pinnedVideo]) {
+  if (!pinnedVideo || !participantStates[pinnedVideo]) {
     return null;
   }
 
-  const { stream, participantIdentity } = videoStreams[pinnedVideo];
+  const state = participantStates[pinnedVideo];
 
   return (
     <div
@@ -57,23 +56,29 @@ const PinnedVideo = ({
       }}
       onMouseDown={handleMouseDown}
     >
-      <video
-        ref={(el) => {
-          if (el) {
-            videoRefs.current[pinnedVideo] = el;
-            el.srcObject = stream;
-            el.play().catch((e) => console.error("Pinned video play failed:", e));
-          }
-        }}
-        autoPlay
-        playsInline
-        muted={participantIdentity === auth.currentUser?.uid}
-        className="w-full h-full rounded-md object-cover"
-      />
+      {state.videoEnabled && state.stream ? (
+        <video
+          ref={(el) => {
+            if (el && state.trackSid) {
+              videoRefs.current[state.trackSid] = el;
+              el.srcObject = state.stream;
+              el.play().catch((e) => console.error("Pinned video play failed:", e));
+            }
+          }}
+          autoPlay
+          playsInline
+          muted={state.identity === auth.currentUser?.uid}
+          className="w-full h-full rounded-md object-cover"
+        />
+      ) : (
+        <div className="video-off-placeholder w-full h-full rounded-md">
+          <VideoOff className="h-8 w-8" />
+        </div>
+      )}
       <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
-        {participantIdentity === auth.currentUser?.uid
+        {state.identity === auth.currentUser?.uid
           ? "You"
-          : getParticipantName(participantIdentity)}
+          : getParticipantName(state.identity)}
       </div>
       <div className="absolute top-2 right-2 flex gap-1">
         <button

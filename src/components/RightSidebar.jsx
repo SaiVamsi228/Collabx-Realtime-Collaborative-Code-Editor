@@ -4,7 +4,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { PinIcon, ChevronDown } from "lucide-react";
+import { PinIcon, ChevronDown, VideoOff } from "lucide-react";
 import "../styles/globals.css";
 
 const RightSidebar = ({
@@ -12,8 +12,8 @@ const RightSidebar = ({
   rightSidebarOpen,
   rightSidebarTab,
   setRightSidebarTab,
-  videoStreams,
-  participants,
+  participantStates,
+  livekitParticipants,
   pinnedVideo,
   setPinnedVideo,
   auth,
@@ -24,9 +24,8 @@ const RightSidebar = ({
   newMessageCount,
   isAtBottom,
   scrollToBottom,
-  livekitParticipants,
+  videoRefs,
 }) => {
-  const videoRefs = useRef({});
   const chatContainerRef = useRef(null);
   const chatMessagesRef = useRef(null);
 
@@ -80,25 +79,33 @@ const RightSidebar = ({
           </div>
           <ScrollArea className="flex-1 p-2 h-[calc(100%-60px)]">
             <div className="video-grid">
-              {Object.entries(videoStreams).map(([sid, { stream, participantIdentity }]) => (
-                <div key={sid} className="video-wrapper relative">
-                  <video
-                    ref={(el) => {
-                      if (el) {
-                        videoRefs.current[sid] = el;
-                        el.srcObject = stream;
-                        el.play().catch((e) => console.error("Video play failed:", e));
-                      }
-                    }}
-                    autoPlay
-                    playsInline
-                    muted={participantIdentity === auth.currentUser?.uid}
-                    className="w-full h-auto rounded-md"
-                  />
+              {Object.entries(participantStates).map(([identity, state]) => (
+                <div key={identity} className="video-wrapper relative">
+                  {state.videoEnabled && state.stream ? (
+                    <video
+                      ref={(el) => {
+                        if (el && state.trackSid) {
+                          videoRefs.current[state.trackSid] = el;
+                          el.srcObject = state.stream;
+                          el.play().catch((e) =>
+                            console.error("Video play failed:", e)
+                          );
+                        }
+                      }}
+                      autoPlay
+                      playsInline
+                      muted={identity === auth.currentUser?.uid}
+                      className="w-full h-auto rounded-md"
+                    />
+                  ) : (
+                    <div className="video-off-placeholder">
+                      <VideoOff className="h-8 w-8" />
+                    </div>
+                  )}
                   <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
-                    {participantIdentity === auth.currentUser?.uid
+                    {identity === auth.currentUser?.uid
                       ? "You"
-                      : getParticipantName(participantIdentity)}
+                      : getParticipantName(identity)}
                   </div>
                   <div className="absolute top-2 right-2 flex gap-1">
                     <Button
@@ -106,7 +113,7 @@ const RightSidebar = ({
                       size="icon"
                       className="h-6 w-6 bg-background/80 hover:bg-background"
                       onClick={() =>
-                        setPinnedVideo(pinnedVideo === sid ? null : sid)
+                        setPinnedVideo(pinnedVideo === identity ? null : identity)
                       }
                     >
                       <PinIcon
@@ -132,8 +139,10 @@ const RightSidebar = ({
               ref={chatMessagesRef}
               onScroll={() => {
                 if (chatMessagesRef.current) {
-                  const { scrollTop, scrollHeight, clientHeight } = chatMessagesRef.current;
-                  const isBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 10;
+                  const { scrollTop, scrollHeight, clientHeight } =
+                    chatMessagesRef.current;
+                  const isBottom =
+                    Math.abs(scrollHeight - scrollTop - clientHeight) < 10;
                   if (isBottom) {
                     setNewMessageCount(0);
                   }
@@ -174,7 +183,7 @@ const RightSidebar = ({
                 </div>
               </div>
             )}
-            <div className="chat-input-container p-2 border-t">
+            <div className="chat-input-container p-培2 border-t">
               <div className="flex gap-2">
                 <Input
                   placeholder="Type a message..."
