@@ -4,7 +4,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { PinIcon, ChevronDown, X } from "lucide-react";
+import { PinIcon, ChevronDown } from "lucide-react";
 import "../styles/globals.css";
 
 const RightSidebar = ({
@@ -24,19 +24,20 @@ const RightSidebar = ({
   newMessageCount,
   isAtBottom,
   scrollToBottom,
+  livekitParticipants,
 }) => {
   const videoRefs = useRef({});
   const chatContainerRef = useRef(null);
   const chatMessagesRef = useRef(null);
 
-  const handleChatScroll = () => {
-    if (chatContainerRef.current && chatMessagesRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = chatMessagesRef.current;
-      const isBottom = scrollHeight - scrollTop - clientHeight < 1;
-      setIsAtBottom(isBottom);
-      if (isBottom) {
-        setNewMessageCount(0);
-      }
+  const getParticipantName = (identity) => {
+    const participant = livekitParticipants[identity];
+    if (!participant) return "Unknown";
+    try {
+      const metadata = participant.metadata ? JSON.parse(participant.metadata) : {};
+      return metadata.displayName || participant.identity || "Unknown";
+    } catch {
+      return participant.identity || "Unknown";
     }
   };
 
@@ -79,25 +80,25 @@ const RightSidebar = ({
           </div>
           <ScrollArea className="flex-1 p-2 h-[calc(100%-60px)]">
             <div className="video-grid">
-              {Object.entries(videoStreams).map(([sid, stream]) => (
+              {Object.entries(videoStreams).map(([sid, { stream, participantIdentity }]) => (
                 <div key={sid} className="video-wrapper relative">
                   <video
                     ref={(el) => {
                       if (el) {
                         videoRefs.current[sid] = el;
                         el.srcObject = stream;
+                        el.play().catch((e) => console.error("Video play failed:", e));
                       }
                     }}
                     autoPlay
                     playsInline
-                    muted={sid.includes(auth.currentUser?.uid)}
+                    muted={participantIdentity === auth.currentUser?.uid}
                     className="w-full h-auto rounded-md"
                   />
                   <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
-                    {sid.includes(auth.currentUser?.uid)
+                    {participantIdentity === auth.currentUser?.uid
                       ? "You"
-                      : participants.find((p) => sid.includes(p.uid))?.username ||
-                        "Unknown"}
+                      : getParticipantName(participantIdentity)}
                   </div>
                   <div className="absolute top-2 right-2 flex gap-1">
                     <Button
@@ -129,7 +130,15 @@ const RightSidebar = ({
             <ScrollArea
               className="chat-messages flex-1"
               ref={chatMessagesRef}
-              onScroll={handleChatScroll}
+              onScroll={() => {
+                if (chatMessagesRef.current) {
+                  const { scrollTop, scrollHeight, clientHeight } = chatMessagesRef.current;
+                  const isBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 10;
+                  if (isBottom) {
+                    setNewMessageCount(0);
+                  }
+                }
+              }}
             >
               {chatMessages.map((message) => {
                 const isCurrentUser = message.senderId === auth.currentUser?.uid;

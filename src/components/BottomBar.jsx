@@ -4,7 +4,7 @@ import { Mic, MicOff, Video, VideoOff, LogOut } from "lucide-react";
 const BottomBar = ({
   theme,
   micEnabled,
-  setMicEnabled,
+  toggleMic,
   videoEnabled,
   toggleVideo,
   room,
@@ -22,16 +22,7 @@ const BottomBar = ({
               : "bg-black hover:bg-gray-800"
           }`}
           size="icon"
-          onClick={async () => {
-            if (room && room.localParticipant) {
-              try {
-                await room.localParticipant.setMicrophoneEnabled(!micEnabled);
-                setMicEnabled(!micEnabled);
-              } catch (error) {
-                console.error("Error toggling mic:", error);
-              }
-            }
-          }}
+          onClick={toggleMic}
         >
           {micEnabled ? (
             <Mic
