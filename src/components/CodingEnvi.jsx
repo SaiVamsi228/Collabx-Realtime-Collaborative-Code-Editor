@@ -232,6 +232,7 @@ const CodingEnvi = () => {
   const [rightSidebarTab, setRightSidebarTab] = useState("video");
   const [micEnabled, setMicEnabled] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(false);
+  const [videoTrackSid, setVideoTrackSid] = useState(null); // New state to track video track SID
   const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
   const [previousLanguage, setPreviousLanguage] = useState(initialLanguage);
   const [codeOutput, setCodeOutput] = useState(null);
@@ -357,7 +358,6 @@ const CodingEnvi = () => {
 
     const newStates = { ...participantStates };
 
-    // Initialize local participant
     newStates[room.localParticipant.identity] = {
       identity: room.localParticipant.identity,
       videoEnabled: false,
@@ -367,7 +367,6 @@ const CodingEnvi = () => {
       audioTrackSid: null,
     };
 
-    // Process local participant tracks
     if (room.localParticipant.tracks) {
       room.localParticipant.tracks.forEach((publication) => {
         if (publication.track) {
@@ -390,13 +389,11 @@ const CodingEnvi = () => {
               audioEnabled: true,
               audioTrackSid: publication.trackSid,
             };
-            // Do not attach local audio to prevent feedback
           }
         }
       });
     }
 
-    // Process remote participants
     if (room.participants) {
       room.participants.forEach((participant) => {
         newStates[participant.identity] = {
@@ -528,6 +525,7 @@ const CodingEnvi = () => {
     });
     videoRefs.current = {};
     setPinnedVideo(null);
+    setVideoTrackSid(null); // Clear video track SID
 
     if (bindingRef.current) {
       bindingRef.current.destroy();
@@ -687,7 +685,6 @@ const CodingEnvi = () => {
             audioTrackSid: publication.trackSid,
           },
         }));
-        // Do not attach local audio to prevent feedback
       }
     };
 
@@ -705,6 +702,7 @@ const CodingEnvi = () => {
         if (videoRefs.current[publication.trackSid]) {
           videoRefs.current[publication.trackSid].srcObject = null;
         }
+        setVideoTrackSid(null); // Clear video track SID
       } else if (publication.track.kind === "audio") {
         setParticipantStates((prev) => ({
           ...prev,
@@ -1006,6 +1004,7 @@ const CodingEnvi = () => {
     if (!room || !room.localParticipant || room.state !== "connected") {
       console.error("Cannot toggle video: Room not connected or participant unavailable");
       setVideoEnabled(false);
+      setVideoTrackSid(null);
       return;
     }
 
@@ -1030,6 +1029,7 @@ const CodingEnvi = () => {
         console.log("Video track published:", publication.trackSid);
 
         setVideoEnabled(true);
+        setVideoTrackSid(publication.trackSid); // Store track SID
 
         const currentSid = publication.trackSid;
         if (videoRefs.current[currentSid]) {
@@ -1040,12 +1040,20 @@ const CodingEnvi = () => {
         }
       } else {
         console.log("Disabling video...");
-        // Use tracks instead of videoTracks to avoid undefined error
-        const videoPublication = room.localParticipant.tracks
-          ? Array.from(room.localParticipant.tracks.values()).find(
-              (pub) => pub.kind === "video" && pub.source === LivekitClient.Track.Source.Camera
-            )
-          : null;
+        console.log("Current tracks:", Array.from(room.localParticipant.tracks?.entries() || []));
+        console.log("Stored videoTrackSid:", videoTrackSid);
+
+        let videoPublication = null;
+        if (videoTrackSid && room.localParticipant.tracks) {
+          // Try to find by stored trackSid
+          videoPublication = room.localParticipant.tracks.get(videoTrackSid);
+        }
+        if (!videoPublication && room.localParticipant.tracks) {
+          // Fallback to any video track
+          videoPublication = Array.from(room.localParticipant.tracks.values()).find(
+            (pub) => pub.kind === "video"
+          );
+        }
 
         if (videoPublication && videoPublication.track) {
           const track = videoPublication.track;
@@ -1067,14 +1075,36 @@ const CodingEnvi = () => {
           }
 
           setVideoEnabled(false);
+          setVideoTrackSid(null);
         } else {
-          console.warn("No video track found to unpublish");
+          console.warn("No video track found to unpublish, stopping all video tracks...");
+          // Fallback: Stop all video tracks
+          try {
+            const stream = videoRefs.current[videoTrackSid]?.srcObject;
+            if (stream) {
+              stream.getTracks().forEach((t) => t.stop());
+            }
+            if (videoTrackSid && videoRefs.current[videoTrackSid]) {
+              videoRefs.current[videoTrackSid].srcObject = null;
+              delete videoRefs.current[videoTrackSid];
+            }
+          } catch (err) {
+            console.error("Error stopping video tracks:", err);
+          }
           setVideoEnabled(false);
+          setVideoTrackSid(null);
         }
       }
     } catch (error) {
       console.error("Error toggling video:", error);
       setVideoEnabled(false);
+      setVideoTrackSid(null);
+      // Clean up any lingering streams
+      if (videoTrackSid && videoRefs.current[videoTrackSid]) {
+        videoRefs.current[videoTrackSid].srcObject?.getTracks().forEach((t) => t.stop());
+        videoRefs.current[videoTrackSid].srcObject = null;
+        delete videoRefs.current[videoTrackSid];
+      }
     }
   };
 
@@ -1098,7 +1128,7 @@ const CodingEnvi = () => {
         console.log("Disabling mic...");
         const audioPublication = room.localParticipant.tracks
           ? Array.from(room.localParticipant.tracks.values()).find(
-              (pub) => pub.kind === "audio" && pub.source === LivekitClient.Track.Source.Microphone
+              (pub) => pub.kind === "audio"
             )
           : null;
         if (audioPublication && audioPublication.track) {
