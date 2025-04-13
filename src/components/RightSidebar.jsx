@@ -94,7 +94,7 @@ const RightSidebar = ({
                       }}
                       autoPlay
                       playsInline
-                      muted={identity === auth.currentUser?.uid}
+                      muted // Always mute to prevent audio feedback
                       className="w-full h-auto rounded-md"
                     />
                   ) : (
@@ -183,7 +183,7 @@ const RightSidebar = ({
                 </div>
               </div>
             )}
-            <div className="chat-input-container p-培2 border-t">
+            <div className="chat-input-container p-2 border-t">
               <div className="flex gap-2">
                 <Input
                   placeholder="Type a message..."

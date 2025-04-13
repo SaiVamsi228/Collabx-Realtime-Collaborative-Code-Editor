@@ -67,7 +67,7 @@ const PinnedVideo = ({
           }}
           autoPlay
           playsInline
-          muted={state.identity === auth.currentUser?.uid}
+          muted // Always mute to prevent audio feedback
           className="w-full h-full rounded-md object-cover"
         />
       ) : (
