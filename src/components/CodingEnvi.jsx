@@ -24,7 +24,7 @@ import {
 } from "firebase/firestore";
 import * as LivekitClient from "livekit-client";
 
-// Styles remain unchanged
+// Styles unchanged
 const styles = `
   .participant-container {
     position: relative;
@@ -232,7 +232,7 @@ const CodingEnvi = () => {
   const [rightSidebarTab, setRightSidebarTab] = useState("video");
   const [micEnabled, setMicEnabled] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(false);
-  const [videoTrackSid, setVideoTrackSid] = useState(null); // New state to track video track SID
+  const [videoTrackSid, setVideoTrackSid] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
   const [previousLanguage, setPreviousLanguage] = useState(initialLanguage);
   const [codeOutput, setCodeOutput] = useState(null);
@@ -356,8 +356,11 @@ const CodingEnvi = () => {
       return;
     }
 
+    console.log("Initializing existing tracks for participants...");
+
     const newStates = { ...participantStates };
 
+    // Initialize local participant
     newStates[room.localParticipant.identity] = {
       identity: room.localParticipant.identity,
       videoEnabled: false,
@@ -368,8 +371,9 @@ const CodingEnvi = () => {
     };
 
     if (room.localParticipant.tracks) {
+      console.log("Local participant tracks:", Array.from(room.localParticipant.tracks.entries()));
       room.localParticipant.tracks.forEach((publication) => {
-        if (publication.track) {
+        if (publication.track && publication.isSubscribed !== false) {
           if (publication.kind === "video") {
             newStates[room.localParticipant.identity] = {
               ...newStates[room.localParticipant.identity],
@@ -394,7 +398,9 @@ const CodingEnvi = () => {
       });
     }
 
+    // Initialize remote participants
     if (room.participants) {
+      console.log("Remote participants:", Array.from(room.participants.keys()));
       room.participants.forEach((participant) => {
         newStates[participant.identity] = {
           identity: participant.identity,
@@ -406,6 +412,7 @@ const CodingEnvi = () => {
         };
 
         if (participant.tracks) {
+          console.log(`Tracks for ${participant.identity}:`, Array.from(participant.tracks.entries()));
           participant.tracks.forEach((publication) => {
             if (publication.track && publication.isSubscribed) {
               if (publication.kind === "video") {
@@ -415,12 +422,14 @@ const CodingEnvi = () => {
                   stream: publication.track.mediaStream,
                   trackSid: publication.trackSid,
                 };
-                if (videoRefs.current[publication.trackSid]) {
-                  videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
-                  videoRefs.current[publication.trackSid].play().catch((e) =>
-                    console.error("Remote video play failed:", e)
-                  );
+                if (!videoRefs.current[publication.trackSid]) {
+                  console.log(`Creating video ref for track ${publication.trackSid}`);
+                  videoRefs.current[publication.trackSid] = document.createElement("video");
                 }
+                videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
+                videoRefs.current[publication.trackSid].play().catch((e) =>
+                  console.error(`Remote video play failed for ${participant.identity}:`, e)
+                );
               } else if (publication.kind === "audio") {
                 newStates[participant.identity] = {
                   ...newStates[participant.identity],
@@ -448,7 +457,9 @@ const CodingEnvi = () => {
       setConnectionStatus("connecting");
       console.log(`Attempting to join room, attempt ${retryCount + 1}/${maxRetries}`);
 
-      const token = await getLiveKitToken(sessionId, auth.currentUser.uid);
+      const token = await getLiveKitToken(sessionId, auth.currentUser.uid).catch((err) => {
+        throw new Error(`Token fetch failed: ${err.message}`);
+      });
       const room = new LivekitClient.Room({
         adaptiveStream: true,
         dynacast: true,
@@ -465,6 +476,19 @@ const CodingEnvi = () => {
         }
       );
       console.log("Successfully connected to room");
+
+      // Manually subscribe to all existing tracks
+      if (room.participants) {
+        console.log("Manually subscribing to existing tracks...");
+        room.participants.forEach((participant) => {
+          participant.tracks.forEach((publication) => {
+            if (publication.track && !publication.isSubscribed) {
+              console.log(`Subscribing to track ${publication.trackSid} for ${participant.identity}`);
+              publication.setSubscribed(true);
+            }
+          });
+        });
+      }
 
       try {
         await room.localParticipant.setMetadata(
@@ -525,7 +549,7 @@ const CodingEnvi = () => {
     });
     videoRefs.current = {};
     setPinnedVideo(null);
-    setVideoTrackSid(null); // Clear video track SID
+    setVideoTrackSid(null);
 
     if (bindingRef.current) {
       bindingRef.current.destroy();
@@ -546,6 +570,7 @@ const CodingEnvi = () => {
     if (!room) return;
 
     const handleParticipantConnected = (participant) => {
+      console.log(`Participant connected: ${participant.identity}`);
       setParticipantStates((prev) => ({
         ...prev,
         [participant.identity]: {
@@ -558,42 +583,50 @@ const CodingEnvi = () => {
         },
       }));
 
+      // Ensure new participant's client subscribes to existing tracks
       if (participant.tracks) {
         participant.tracks.forEach((publication) => {
-          if (publication.track && publication.isSubscribed) {
-            if (publication.kind === "video") {
-              setParticipantStates((prev) => ({
-                ...prev,
-                [participant.identity]: {
-                  ...prev[participant.identity],
-                  videoEnabled: true,
-                  stream: publication.track.mediaStream,
-                  trackSid: publication.trackSid,
-                },
-              }));
-              if (videoRefs.current[publication.trackSid]) {
-                videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
-                videoRefs.current[publication.trackSid].play().catch((e) =>
-                  console.error("Video play failed:", e)
-                );
-              }
-            } else if (publication.kind === "audio") {
-              setParticipantStates((prev) => ({
-                ...prev,
-                [participant.identity]: {
-                  ...prev[participant.identity],
-                  audioEnabled: true,
-                  audioTrackSid: publication.trackSid,
-                },
-              }));
-              publication.track.attach();
+          if (publication.track && !publication.isSubscribed) {
+            console.log(`Subscribing to new track ${publication.trackSid} for ${participant.identity}`);
+            publication.setSubscribed(true);
+          }
+          if (publication.track && publication.isSubscribed && publication.kind === "video") {
+            setParticipantStates((prev) => ({
+              ...prev,
+              [participant.identity]: {
+                ...prev[participant.identity],
+                videoEnabled: true,
+                stream: publication.track.mediaStream,
+                trackSid: publication.trackSid,
+              },
+            }));
+            if (!videoRefs.current[publication.trackSid]) {
+              videoRefs.current[publication.trackSid] = document.createElement("video");
             }
+            videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
+            videoRefs.current[publication.trackSid].play().catch((e) =>
+              console.error(`Video play failed for new participant ${participant.identity}:`, e)
+            );
+          } else if (publication.kind === "audio") {
+            setParticipantStates((prev) => ({
+              ...prev,
+              [participant.identity]: {
+                ...prev[participant.identity],
+                audioEnabled: true,
+                audioTrackSid: publication.trackSid,
+              },
+            }));
+            publication.track.attach();
           }
         });
       }
+
+      // Re-initialize tracks to ensure late joiners see existing videos
+      initializeExistingTracks(room);
     };
 
     const handleParticipantDisconnected = (participant) => {
+      console.log(`Participant disconnected: ${participant.identity}`);
       setParticipantStates((prev) => {
         const newStates = { ...prev };
         delete newStates[participant.identity];
@@ -603,6 +636,7 @@ const CodingEnvi = () => {
     };
 
     const handleTrackSubscribed = (track, publication, participant) => {
+      console.log(`Track subscribed: ${track.sid} for ${participant.identity}, kind: ${track.kind}`);
       if (track.kind === "video") {
         setParticipantStates((prev) => ({
           ...prev,
@@ -613,12 +647,14 @@ const CodingEnvi = () => {
             trackSid: track.sid,
           },
         }));
-        if (videoRefs.current[track.sid]) {
-          videoRefs.current[track.sid].srcObject = track.mediaStream;
-          videoRefs.current[track.sid].play().catch((e) =>
-            console.error("Video play failed:", e)
-          );
+        if (!videoRefs.current[track.sid]) {
+          console.log(`Creating video ref for subscribed track ${track.sid}`);
+          videoRefs.current[track.sid] = document.createElement("video");
         }
+        videoRefs.current[track.sid].srcObject = track.mediaStream;
+        videoRefs.current[track.sid].play().catch((e) =>
+          console.error(`Video play failed for ${participant.identity}:`, e)
+        );
       } else if (track.kind === "audio" && participant.identity !== auth.currentUser?.uid) {
         setParticipantStates((prev) => ({
           ...prev,
@@ -633,6 +669,7 @@ const CodingEnvi = () => {
     };
 
     const handleTrackUnsubscribed = (track, publication, participant) => {
+      console.log(`Track unsubscribed: ${track.sid} for ${participant.identity}`);
       if (track.kind === "video") {
         setParticipantStates((prev) => ({
           ...prev,
@@ -645,6 +682,7 @@ const CodingEnvi = () => {
         }));
         if (videoRefs.current[track.sid]) {
           videoRefs.current[track.sid].srcObject = null;
+          delete videoRefs.current[track.sid];
         }
       } else if (track.kind === "audio") {
         setParticipantStates((prev) => ({
@@ -660,6 +698,7 @@ const CodingEnvi = () => {
     };
 
     const handleLocalTrackPublished = (publication) => {
+      console.log(`Local track published: ${publication.trackSid}, kind: ${publication.track.kind}`);
       if (publication.track.kind === "video") {
         setParticipantStates((prev) => ({
           ...prev,
@@ -673,7 +712,7 @@ const CodingEnvi = () => {
         if (videoRefs.current[publication.trackSid]) {
           videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
           videoRefs.current[publication.trackSid].play().catch((e) =>
-            console.error("Video play failed:", e)
+            console.error("Local video play failed:", e)
           );
         }
       } else if (publication.track.kind === "audio") {
@@ -689,6 +728,7 @@ const CodingEnvi = () => {
     };
 
     const handleLocalTrackUnpublished = (publication) => {
+      console.log(`Local track unpublished: ${publication.trackSid}`);
       if (publication.track.kind === "video") {
         setParticipantStates((prev) => ({
           ...prev,
@@ -701,8 +741,9 @@ const CodingEnvi = () => {
         }));
         if (videoRefs.current[publication.trackSid]) {
           videoRefs.current[publication.trackSid].srcObject = null;
+          delete videoRefs.current[publication.trackSid];
         }
-        setVideoTrackSid(null); // Clear video track SID
+        setVideoTrackSid(null);
       } else if (publication.track.kind === "audio") {
         setParticipantStates((prev) => ({
           ...prev,
@@ -1029,7 +1070,7 @@ const CodingEnvi = () => {
         console.log("Video track published:", publication.trackSid);
 
         setVideoEnabled(true);
-        setVideoTrackSid(publication.trackSid); // Store track SID
+        setVideoTrackSid(publication.trackSid);
 
         const currentSid = publication.trackSid;
         if (videoRefs.current[currentSid]) {
@@ -1045,11 +1086,9 @@ const CodingEnvi = () => {
 
         let videoPublication = null;
         if (videoTrackSid && room.localParticipant.tracks) {
-          // Try to find by stored trackSid
           videoPublication = room.localParticipant.tracks.get(videoTrackSid);
         }
         if (!videoPublication && room.localParticipant.tracks) {
-          // Fallback to any video track
           videoPublication = Array.from(room.localParticipant.tracks.values()).find(
             (pub) => pub.kind === "video"
           );
@@ -1078,7 +1117,6 @@ const CodingEnvi = () => {
           setVideoTrackSid(null);
         } else {
           console.warn("No video track found to unpublish, stopping all video tracks...");
-          // Fallback: Stop all video tracks
           try {
             const stream = videoRefs.current[videoTrackSid]?.srcObject;
             if (stream) {
@@ -1099,7 +1137,6 @@ const CodingEnvi = () => {
       console.error("Error toggling video:", error);
       setVideoEnabled(false);
       setVideoTrackSid(null);
-      // Clean up any lingering streams
       if (videoTrackSid && videoRefs.current[videoTrackSid]) {
         videoRefs.current[videoTrackSid].srcObject?.getTracks().forEach((t) => t.stop());
         videoRefs.current[videoTrackSid].srcObject = null;

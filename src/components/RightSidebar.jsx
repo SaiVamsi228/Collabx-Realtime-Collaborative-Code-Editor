@@ -1,11 +1,4 @@
-import { useRef } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { ScrollArea } from "./ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { PinIcon, ChevronDown, VideoOff } from "lucide-react";
-import "../styles/globals.css";
+import React, { useEffect, useRef } from "react";
 
 const RightSidebar = ({
   theme,
@@ -26,190 +19,138 @@ const RightSidebar = ({
   scrollToBottom,
   videoRefs,
 }) => {
-  const chatContainerRef = useRef(null);
   const chatMessagesRef = useRef(null);
 
-  const getParticipantName = (identity) => {
-    const participant = livekitParticipants[identity];
-    if (!participant) return "Unknown";
-    try {
-      const metadata = participant.metadata ? JSON.parse(participant.metadata) : {};
-      return metadata.displayName || participant.identity || "Unknown";
-    } catch {
-      return participant.identity || "Unknown";
-    }
+  // Re-render videos when participantStates changes
+  useEffect(() => {
+    console.log("RightSidebar: participantStates updated:", participantStates);
+    Object.entries(participantStates).forEach(([identity, state]) => {
+      if (state.videoEnabled && state.trackSid && videoRefs.current[state.trackSid]) {
+        console.log(`Ensuring video for ${identity}, trackSid: ${state.trackSid}`);
+        videoRefs.current[state.trackSid].play().catch((e) =>
+          console.error(`Video play failed for ${identity}:`, e)
+        );
+      }
+    });
+  }, [participantStates, videoRefs]);
+
+  const handlePinVideo = (identity) => {
+    setPinnedVideo(pinnedVideo === identity ? null : identity);
   };
 
   return (
     <div
-      className={`border-l transition-all duration-300 ${
-        rightSidebarOpen ? "w-64" : "w-0 overflow-hidden"
-      }`}
+      className={`right-sidebar ${
+        rightSidebarOpen ? "w-80" : "w-0"
+      } bg-gray-100 dark:bg-gray-800 transition-all duration-300 flex flex-col overflow-hidden`}
     >
-      <Tabs
-        value={rightSidebarTab}
-        onValueChange={setRightSidebarTab}
-        className="h-full flex flex-col"
-      >
-        <div className="p-2 border-b">
-          <TabsList className="w-full">
-            <TabsTrigger value="video" className="flex-1 rounded-lg">
-              Video
-            </TabsTrigger>
-            <TabsTrigger value="chat" className="flex-1 rounded-lg">
-              Chat
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
-        <TabsContent
-          value="video"
-          className="flex-1 m-0 p-0 right-sidebar-content"
+      <div className="flex border-b border-gray-200 dark:border-gray-700">
+        <button
+          className={`flex-1 p-2 ${
+            rightSidebarTab === "video"
+              ? "bg-blue-500 text-white"
+              : "bg-gray-200 dark:bg-gray-700"
+          }`}
+          onClick={() => setRightSidebarTab("video")}
         >
-          <div className="p-2 border-b">
-            <Select>
-              <SelectTrigger>
-                <SelectValue placeholder="Select layout" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="grid-1">1 per row</SelectItem>
-                <SelectItem value="grid-2">2 per row</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <ScrollArea className="flex-1 p-2 h-[calc(100%-60px)]">
-            <div className="video-grid">
-              {Object.entries(participantStates).map(([identity, state]) => (
-                <div key={identity} className="video-wrapper relative">
-                  {state.videoEnabled && state.stream ? (
-                    <video
-                      ref={(el) => {
-                        if (el && state.trackSid) {
-                          videoRefs.current[state.trackSid] = el;
-                          el.srcObject = state.stream;
-                          el.play().catch((e) =>
-                            console.error("Video play failed:", e)
-                          );
-                        }
-                      }}
-                      autoPlay
-                      playsInline
-                      muted // Always mute to prevent audio feedback
-                      className="w-full h-auto rounded-md"
-                    />
-                  ) : (
-                    <div className="video-off-placeholder">
-                      <VideoOff className="h-8 w-8" />
-                    </div>
-                  )}
-                  <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
-                    {identity === auth.currentUser?.uid
-                      ? "You"
-                      : getParticipantName(identity)}
+          Video
+        </button>
+        <button
+          className={`flex-1 p-2 ${
+            rightSidebarTab === "chat"
+              ? "bg-blue-500 text-white"
+              : "bg-gray-200 dark:bg-gray-700"
+          }`}
+          onClick={() => setRightSidebarTab("chat")}
+        >
+          Chat
+        </button>
+      </div>
+
+      <div className="right-sidebar-content">
+        {rightSidebarTab === "video" && (
+          <div className="video-grid p-2">
+            {Object.entries(participantStates).map(([identity, state]) => {
+              const participant = livekitParticipants[identity];
+              const isLocal = identity === auth.currentUser?.uid;
+              return (
+                <div key={identity} className="participant-container">
+                  <div className="video-wrapper">
+                    {state.videoEnabled && state.trackSid ? (
+                      <>
+                        <video
+                          ref={(el) => {
+                            if (el && state.trackSid) {
+                              videoRefs.current[state.trackSid] = el;
+                              if (state.stream) {
+                                el.srcObject = state.stream;
+                                el.play().catch((e) =>
+                                  console.error(`Video play failed for ${identity}:`, e)
+                                );
+                              }
+                            }
+                          }}
+                          autoPlay
+                          muted={isLocal}
+                          className="rounded"
+                        />
+                        <button
+                          onClick={() => handlePinVideo(identity)}
+                          className="absolute top-2 right-2 bg-gray-800 text-white p-1 rounded"
+                        >
+                          {pinnedVideo === identity ? "Unpin" : "Pin"}
+                        </button>
+                      </>
+                    ) : (
+                      <div className="video-off-placeholder">
+                        {participant?.identity || "Unknown"} (Video Off)
+                      </div>
+                    )}
                   </div>
-                  <div className="absolute top-2 right-2 flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 bg-background/80 hover:bg-background"
-                      onClick={() =>
-                        setPinnedVideo(pinnedVideo === identity ? null : identity)
-                      }
-                    >
-                      <PinIcon
-                        className={`h-3 w-3 ${
-                          theme === "light" ? "text-black" : "text-white"
-                        }`}
-                      />
-                    </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {rightSidebarTab === "chat" && (
+          <div className="chat-container">
+            <div className="chat-messages" ref={chatMessagesRef}>
+              {chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`message ${msg.senderId === auth.currentUser?.uid ? "sent" : "received"}`}
+                >
+                  <div className="message-content">
+                    <span className="sender">{msg.senderName}</span>
+                    <p>{msg.text}</p>
+                    <span className="timestamp">
+                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
-          </ScrollArea>
-        </TabsContent>
-
-        <TabsContent
-          value="chat"
-          className="flex-1 m-0 p-0 right-sidebar-content"
-        >
-          <div className="chat-container flex-1 flex flex-col" ref={chatContainerRef}>
-            <ScrollArea
-              className="chat-messages flex-1"
-              ref={chatMessagesRef}
-              onScroll={() => {
-                if (chatMessagesRef.current) {
-                  const { scrollTop, scrollHeight, clientHeight } =
-                    chatMessagesRef.current;
-                  const isBottom =
-                    Math.abs(scrollHeight - scrollTop - clientHeight) < 10;
-                  if (isBottom) {
-                    setNewMessageCount(0);
-                  }
-                }
-              }}
-            >
-              {chatMessages.map((message) => {
-                const isCurrentUser = message.senderId === auth.currentUser?.uid;
-                return (
-                  <div
-                    key={message.id}
-                    className={`message ${isCurrentUser ? "sent" : "received"} p-2`}
-                  >
-                    <div className="message-content">
-                      {!isCurrentUser && (
-                        <span className="sender">{message.senderName}</span>
-                      )}
-                      <p>{message.text}</p>
-                      <span className="timestamp text-xs">
-                        {new Date(message.timestamp).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </ScrollArea>
-            {newMessageCount > 0 && !isAtBottom && (
-              <div className="new-messages-indicator p-2">
-                <div
-                  className="new-messages-button flex items-center gap-1 bg-blue-500 text-white px-2 py-1 rounded cursor-pointer"
-                  onClick={scrollToBottom}
-                >
-                  <ChevronDown className="h-4 w-4" />
-                  {newMessageCount} new message{newMessageCount > 1 ? "s" : ""}
-                </div>
+            {!isAtBottom && newMessageCount > 0 && (
+              <div className="new-messages-indicator">
+                <button className="new-messages-button" onClick={scrollToBottom}>
+                  {newMessageCount} New Message{newMessageCount > 1 ? "s" : ""}
+                </button>
               </div>
             )}
-            <div className="chat-input-container p-2 border-t">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Type a message..."
-                  className="flex-1"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                />
-                <Button
-                  size="sm"
-                  className="rounded-lg bg-black text-white hover:bg-gray-900"
-                  onClick={handleSendMessage}
-                  disabled={!newMessage.trim()}
-                >
-                  Send
-                </Button>
-              </div>
+            <div className="chat-input-container">
+              <input
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                placeholder="Type a message..."
+                className="w-full p-2 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600"
+              />
             </div>
           </div>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
     </div>
   );
 };
