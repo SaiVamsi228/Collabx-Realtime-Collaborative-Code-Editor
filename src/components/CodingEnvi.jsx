@@ -1,207 +1,204 @@
-  import { useState, useRef, useEffect, useMemo } from "react";
-  import NightOwl from "monaco-themes/themes/Night Owl.json";
-  import LeftSidebar from "./LeftSidebar";
-  import TopBar from "./TopBar";
-  import PinnedVideo from "./PinnedVideo";
-  import EditorArea from "./EditorArea";
-  import RightSidebar from "./RightSidebar";
-  import BottomBar from "./BottomBar";
-  import { ThemeProvider, useTheme } from "./theme-provider";
-  import "../styles/CodingEnvi.css";
-  import { executeCode } from "../api/judge0Service";
-  import * as Y from "yjs";
-  import { WebsocketProvider } from "y-websocket";
-  import { MonacoBinding } from "y-monaco";
-  import { useParams, useNavigate, useLocation } from "react-router-dom";
-  import { auth, db } from "../firebase";
-  import {
-    doc,
-    onSnapshot,
-    collection,
-    addDoc,
-    query,
-    orderBy,
-  } from "firebase/firestore";
-  import * as LivekitClient from "livekit-client";
+import { useState, useRef, useEffect, useMemo } from "react";
+import NightOwl from "monaco-themes/themes/Night Owl.json";
+import LeftSidebar from "./LeftSidebar";
+import TopBar from "./TopBar";
+import PinnedVideo from "./PinnedVideo";
+import EditorArea from "./EditorArea";
+import RightSidebar from "./RightSidebar";
+import BottomBar from "./BottomBar";
+import { ThemeProvider, useTheme } from "./theme-provider";
+import "../styles/CodingEnvi.css";
+import { executeCode } from "../api/judge0Service";
+import * as Y from "yjs";
+import { WebsocketProvider } from "y-websocket";
+import { MonacoBinding } from "y-monaco";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { auth, db } from "../firebase";
+import {
+  doc,
+  onSnapshot,
+  collection,
+  addDoc,
+  query,
+  orderBy,
+} from "firebase/firestore";
+import * as LivekitClient from "livekit-client";
 
-  const styles = `
-    .participant-container {
-      position: relative;
-      padding: 8px;
-      border-radius: 6px;
-      transition: background-color 0.3s ease;
-    }
+const styles = `
+  .participant-container {
+    position: relative;
+    padding: 8px;
+    border-radius: 6px;
+    transition: background-color 0.3s ease;
+  }
 
-    .participant-container.active::before {
-      content: '';
-      position: absolute;
-      inset: -2px;
-      border-radius: 8px;
-      padding: 2px;
-      background: linear-gradient(45deg, #00ff00, #00cc00, #009900, #00ff00);
-      background-size: 200% 200%;
-      animation: rotateGradient 2s linear infinite;
-      z-index: -1;
-    }
+  .participant-container.active::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 8px;
+    padding: 2px;
+    background: linear-gradient(45deg, #00ff00, #00cc00, #009900, #00ff00);
+    background-size: 200% 200%;
+    animation: rotateGradient 2s linear infinite;
+    z-index: -1;
+  }
 
-    @keyframes rotateGradient {
-      0% { background-position: 0% 0%; }
-      50% { background-position: 100% 100%; }
-      100% { background-position: 0% 0%; }
-    }
+  @keyframes rotateGradient {
+    0% { background-position: 0% 0%; }
+    50% { background-position: 100% 100%; }
+    100% { background-position: 0% 0%; }
+  }
 
-    .video-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 8px;
-      width: 100%;
-    }
-    
-    .video-wrapper {
-      position: relative;
-      padding-bottom: 56.25%;
-      height: 0;
-      width: 100%;
-    }
-    
-    .video-wrapper video {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 4px;
-      background-color: #333;
-    }
+  .video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+  
+  .video-wrapper {
+    position: relative;
+    padding-bottom: 56.25%;
+    height: 0;
+    width: 100%;
+  }
+  
+  .video-wrapper video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+    background-color: #333;
+  }
 
-    .right-sidebar-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-    }
+  .right-sidebar-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
 
-    .chat-container {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      position: relative;
-    }
+  .chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+  }
 
-    .chat-messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 10px;
-      display: flex;
-      flex-direction: column-reverse; /* Reverse for bottom-to-top stacking */
-      gap: 10px;
-    }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 10px;
+  }
 
-    .new-messages-indicator {
-      position: sticky;
-      bottom: 60px;
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      padding: 4px;
-      pointer-events: none;
-      z-index: 10;
-    }
+  .new-messages-indicator {
+    position: sticky;
+    bottom: 60px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 4px;
+    pointer-events: none;
+    z-index: 10;
+  }
 
-    .new-messages-button {
-      pointer-events: all;
-      background: #3182ce;
-      color: white;
-      padding: 4px 12px;
-      border-radius: 16px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-      cursor: pointer;
-    }
+  .new-messages-button {
+    pointer-events: all;
+    background: #3182ce;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    cursor: pointer;
+  }
 
-    .message {
-      display: flex;
-      align-items: flex-end;
-    }
+  .message {
+    display: flex;
+    align-items: flex-end;
+  }
 
-    .message.sent {
-      justify-content: flex-end;
-    }
+  .message.sent {
+    justify-content: flex-end;
+  }
 
-    .message.received {
-      justify-content: flex-start;
-    }
+  .message.received {
+    justify-content: flex-start;
+  }
 
-    .message-content {
-      max-width: 70%;
-      padding: 8px 12px;
-      border-radius: 10px;
-      background-color: #fff;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-    }
+  .message-content {
+    max-width: 70%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background-color: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
 
-    .message.sent .message-content {
-      background-color: #dcf8c6;
-    }
+  .message.sent .message-content {
+    background-color: #dcf8c6;
+  }
 
-    .message.received .message-content {
-      background-color: #ffffff;
-    }
+  .message.received .message-content {
+    background-color: #ffffff;
+  }
 
-    .sender {
-      font-size: 12px;
-      font-weight: bold;
-      color: #333;
-      display: block;
-    }
+  .sender {
+    font-size: 12px;
+    font-weight: bold;
+    color: #333;
+    display: block;
+  }
 
-    .message-content p {
-      margin: 4px 0;
-      word-wrap: break-word;
-    }
+  .message-content p {
+    margin: 4px 0;
+    word-wrap: break-word;
+  }
 
-    .timestamp {
-      font-size: 10px;
-      color: #888;
-      display: block;
-      text-align: right;
-    }
+  .timestamp {
+    font-size: 10px;
+    color: #888;
+    display: block;
+    text-align: right;
+  }
 
-    .chat-input-container {
-      position: sticky;
-      bottom: 0;
-      padding: 10px;
-      background: inherit;
-      border-top: 1px solid #e5e7eb;
-    }
-  `;
+  .chat-input-container {
+    position: sticky;
+    bottom: 0;
+    padding: 10px;
+    background: inherit;
+    border-top: 1px solid #e5e7eb;
+  }
+`;
 
-  const styleSheet = document.createElement("style");
-  styleSheet.textContent = styles;
-  document.head.appendChild(styleSheet);
+const styleSheet = document.createElement("style");
+styleSheet.textContent = styles;
+document.head.appendChild(styleSheet);
 
-
-  const getLiveKitToken = async (roomName, participantName) => {
-    const response = await fetch(
-      `https://livekit-token-server-production.up.railway.app/get-token?roomName=${encodeURIComponent(
-        roomName
-      )}&participantName=${encodeURIComponent(participantName)}`
-    );
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to get token: ${response.status} - ${errorText}`);
-    }
-    const data = await response.json();
-    if (!data.success || !data.token) {
-      throw new Error("Invalid token response");
-    }
-    return data.token;
-  };
-
-  // ... (previous imports remain the same)
+const getLiveKitToken = async (roomName, participantName) => {
+  const response = await fetch(
+    `https://livekit-token-server-production.up.railway.app/get-token?roomName=${encodeURIComponent(
+      roomName
+    )}&participantName=${encodeURIComponent(participantName)}`
+  );
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to get token: ${response.status} - ${errorText}`);
+  }
+  const data = await response.json();
+  if (!data.success || !data.token) {
+    throw new Error("Invalid token response");
+  }
+  return data.token;
+};
 
 const CodingEnvi = () => {
   const { sessionId } = useParams();
@@ -334,7 +331,6 @@ const CodingEnvi = () => {
         },
       });
 
-      // Set participant metadata with display name
       await room.connect(
         "wss://video-chat-application-7u5wc7ae.livekit.cloud",
         token
@@ -342,20 +338,20 @@ const CodingEnvi = () => {
 
       room.localParticipant.setMetadata(
         JSON.stringify({
-          displayName: auth.currentUser.displayName || "User" + Math.floor(Math.random() * 1000),
+          displayName:
+            auth.currentUser.displayName ||
+            "User" + Math.floor(Math.random() * 1000),
         })
       );
 
       setRoom(room);
       setConnectionStatus("connected");
 
-      // Initialize tracks
       await room.localParticipant.setMicrophoneEnabled(false);
       await room.localParticipant.setCameraEnabled(false);
     } catch (error) {
       console.error("Failed to join room:", error);
       setConnectionStatus("disconnected");
-      // Attempt reconnection after a delay
       setTimeout(joinRoom, 5000);
     }
   };
@@ -461,7 +457,7 @@ const CodingEnvi = () => {
     const handleDisconnected = () => {
       setConnectionStatus("disconnected");
       cleanupSession();
-      joinRoom(); // Attempt to reconnect
+      joinRoom();
     };
 
     room.on("trackSubscribed", handleTrackSubscribed);
@@ -491,6 +487,258 @@ const CodingEnvi = () => {
     return participants;
   }, [room]);
 
+  const initializeYjs = (language) => {
+    if (!editorRef.current || !monacoRef.current) return;
+
+    if (bindingRef.current) bindingRef.current.destroy();
+
+    const fullSessionId = `${sessionId}-${language}`;
+    const encodedSessionId = encodeURIComponent(fullSessionId);
+    const wsUrl = `wss://web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
+
+    const yDoc = new Y.Doc();
+    yDocRef.current = yDoc;
+
+    providerRef.current = new WebsocketProvider(wsUrl, fullSessionId, yDoc, {
+      resyncInterval: 2000,
+    });
+
+    const yText = yDoc.getText("monaco");
+    bindingRef.current = new MonacoBinding(
+      yText,
+      editorRef.current.getModel(),
+      new Set([editorRef.current]),
+      providerRef.current.awareness
+    );
+
+    yText.observe((event) => {
+      const transaction = event.transaction;
+      let editingClientId = transaction.local
+        ? providerRef.current.awareness.clientID
+        : Array.from(transaction.afterState || []).find(
+            ([clientId, clock]) =>
+              !transaction.beforeState.has(clientId) ||
+              transaction.beforeState.get(clientId) < clock
+          )?.[0];
+
+      if (editingClientId) {
+        setActiveEditors((prev) => {
+          const newSet = new Set(prev);
+          newSet.add(editingClientId);
+          return newSet;
+        });
+        if (editTimeouts.current.has(editingClientId)) {
+          clearTimeout(editTimeouts.current.get(editingClientId));
+        }
+        const timeoutId = setTimeout(() => {
+          setActiveEditors((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(editingClientId);
+            return newSet;
+          });
+          editTimeouts.current.delete(editingClientId);
+        }, 250);
+        editTimeouts.current.set(editingClientId, timeoutId);
+      }
+    });
+
+    const editor = editorRef.current;
+    const awareness = providerRef.current.awareness;
+    const localColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
+    const localName =
+      auth.currentUser?.displayName ||
+      "User" + Math.floor(Math.random() * 1000);
+    awareness.setLocalStateField("user", {
+      name: localName,
+      color: localColor,
+      id: auth.currentUser?.uid,
+    });
+
+    const updateCursorPosition = (position) => {
+      awareness.setLocalStateField("cursor", {
+        line: position.lineNumber,
+        column: position.column,
+      });
+    };
+
+    editor.onDidChangeCursorPosition((e) => updateCursorPosition(e.position));
+    editor.onDidChangeCursorSelection((e) =>
+      updateCursorPosition(e.selection.getPosition())
+    );
+  };
+
+  const handleEditorDidMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+    monaco.editor.defineTheme("night-owl", NightOwl);
+    setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
+    setIsEditorReady(true);
+  };
+
+  useEffect(() => {
+    if (isEditorReady && editorRef.current && monacoRef.current) {
+      initializeYjs(selectedLanguage);
+
+      const translatedCode = location.state?.translatedCode;
+      const newLanguage = location.state?.targetLanguage;
+
+      if (newLanguage && newLanguage !== selectedLanguage) {
+        setPreviousLanguage(selectedLanguage);
+        setSelectedLanguage(newLanguage);
+        monacoRef.current.editor.setModelLanguage(
+          editorRef.current.getModel(),
+          newLanguage
+        );
+        initializeYjs(newLanguage);
+        if (translatedCode === "" && editorRef.current) {
+          editorRef.current.setValue("");
+        }
+      }
+
+      if (
+        translatedCode !== undefined &&
+        translatedCode !== "" &&
+        editorRef.current &&
+        editorRef.current.getValue() !== translatedCode
+      ) {
+        editorRef.current.setValue(translatedCode);
+        editorRef.current.getAction("editor.action.formatDocument").run();
+      }
+    }
+
+    return () => {
+      if (bindingRef.current) bindingRef.current.destroy();
+      if (providerRef.current) providerRef.current.destroy();
+      if (yDocRef.current) yDocRef.current.destroy();
+      editTimeouts.current.clear();
+    };
+  }, [isEditorReady, selectedLanguage, sessionId]);
+
+  useEffect(() => {
+    if (monacoRef.current) {
+      monacoRef.current.editor.setTheme(
+        theme === "dark" ? "night-owl" : "vs-light"
+      );
+    }
+    setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
+  }, [theme]);
+
+  const handleRunCode = async (stdin = "") => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      setCodeOutput(null);
+      setFetchTime(null);
+      setComplexity(null);
+
+      if (!editorRef.current || !editorRef.current.getValue().trim()) {
+        throw new Error("No code to execute!");
+      }
+
+      const startTime = performance.now();
+      const result = await executeCode(
+        editorRef.current.getValue(),
+        selectedLanguage,
+        stdin
+      );
+      const endTime = performance.now();
+
+      result.isError =
+        result.status !== "Accepted" &&
+        (!result.exitCode || result.exitCode !== 0);
+      setCodeOutput(result);
+      setFetchTime((endTime - startTime).toFixed(2));
+      setComplexity("O(n)");
+    } catch (err) {
+      setError(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !auth.currentUser) return;
+
+    try {
+      const messagesRef = collection(db, "sessions", sessionId, "messages");
+      await addDoc(messagesRef, {
+        text: newMessage,
+        senderId: auth.currentUser.uid,
+        senderName: auth.currentUser.displayName || "Anonymous",
+        timestamp: new Date().toISOString(),
+      });
+      setNewMessage("");
+      scrollToBottom();
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (isDragging) {
+      const newX = Math.max(
+        0,
+        Math.min(
+          e.clientX - dragOffset.x,
+          window.innerWidth - 240
+        )
+      );
+      const newY = Math.max(
+        0,
+        Math.min(
+          e.clientY - dragOffset.y,
+          window.innerHeight - 180
+        )
+      );
+      setPinnedVideoPosition({ x: newX, y: newY });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  const handleResizeStart = (e) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  const handleResizeMove = (e) => {
+    if (isResizing) {
+      const newHeight = window.innerHeight - e.clientY;
+      setNotesHeight(
+        Math.max(100, Math.min(newHeight, window.innerHeight - 200))
+      );
+    }
+  };
+
+  const handleResizeEnd = () => {
+    setIsResizing(false);
+  };
+
+  const handleChatScroll = () => {
+    if (chatMessagesRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = chatMessagesRef.current;
+      const isAtBottom =
+        Math.abs(scrollHeight - scrollTop - clientHeight) <= 10;
+      setIsAtBottom(isAtBottom);
+      if (isAtBottom) {
+        setNewMessageCount(0);
+      }
+    }
+  };
+
+  const scrollToBottom = () => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = 0;
+      setNewMessageCount(0);
+    }
+  };
+
   const toggleVideo = async () => {
     if (room && room.localParticipant) {
       try {
@@ -502,9 +750,9 @@ const CodingEnvi = () => {
           await room.localParticipant.publishTrack(videoTrack);
           setVideoEnabled(true);
         } else {
-          const videoTrack = Array.from(room.localParticipant.videoTracks.values()).find(
-            (pub) => pub.source === LivekitClient.Track.Source.Camera
-          );
+          const videoTrack = Array.from(
+            room.localParticipant.videoTracks.values()
+          ).find((pub) => pub.source === LivekitClient.Track.Source.Camera);
           if (videoTrack) {
             await room.localParticipant.unpublishTrack(videoTrack.track);
             videoTrack.track.stop();
@@ -529,9 +777,9 @@ const CodingEnvi = () => {
           await room.localParticipant.publishTrack(audioTrack);
           setMicEnabled(true);
         } else {
-          const audioTrack = Array.from(room.localParticipant.audioTracks.values()).find(
-            (pub) => pub.source === LivekitClient.Track.Source.Microphone
-          );
+          const audioTrack = Array.from(
+            room.localParticipant.audioTracks.values()
+          ).find((pub) => pub.source === LivekitClient.Track.Source.Microphone);
           if (audioTrack) {
             await room.localParticipant.unpublishTrack(audioTrack.track);
             audioTrack.track.stop();
@@ -545,7 +793,24 @@ const CodingEnvi = () => {
     }
   };
 
-  // ... (rest of the component remains unchanged, including other useEffects and render)
+  useEffect(() => {
+    window.addEventListener("mousemove", handleResizeMove);
+    window.addEventListener("mouseup", handleResizeEnd);
+    return () => {
+      window.removeEventListener("mousemove", handleResizeMove);
+      window.removeEventListener("mouseup", handleResizeEnd);
+    };
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (chatMessagesRef.current && chatMessages.length > 0) {
+      scrollToBottom();
+    }
+  }, []);
+
+  if (isAuthenticated === undefined) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div
@@ -665,11 +930,10 @@ const CodingEnvi = () => {
   );
 };
 
-
-  export default function CodingEnviWrapper() {
-    return (
-      <ThemeProvider defaultTheme="light">
-        <CodingEnvi />
-      </ThemeProvider>
-    );
-  }
+export default function CodingEnviWrapper() {
+  return (
+    <ThemeProvider defaultTheme="light">
+      <CodingEnvi />
+    </ThemeProvider>
+  );
+}
