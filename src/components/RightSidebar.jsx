@@ -25,6 +25,7 @@ const RightSidebar = ({
   isAtBottom,
   scrollToBottom,
   videoRefs,
+  speakingParticipants, // Added prop
 }) => {
   const chatContainerRef = useRef(null);
   const chatMessagesRef = useRef(null);
@@ -80,16 +81,23 @@ const RightSidebar = ({
           <ScrollArea className="flex-1 p-2 h-[calc(100%-60px)]">
             <div className="video-grid">
               {Object.entries(participantStates).map(([identity, state]) => (
-                <div key={identity} className="video-wrapper relative">
+                <div
+                  key={identity}
+                  className={`video-wrapper relative ${
+                    speakingParticipants?.has(identity) ? "participant-container active" : ""
+                  }`}
+                >
                   {state.videoEnabled && state.stream ? (
                     <video
                       ref={(el) => {
                         if (el && state.trackSid) {
                           videoRefs.current[state.trackSid] = el;
-                          el.srcObject = state.stream;
-                          el.play().catch((e) =>
-                            console.error("Video play failed:", e)
-                          );
+                          if (el.srcObject !== state.stream) {
+                            el.srcObject = state.stream;
+                            el.play().catch((e) =>
+                              console.error("Video play failed:", e)
+                            );
+                          }
                         }
                       }}
                       autoPlay
