@@ -192,7 +192,7 @@ const styles = `
     bottom: 0;
     padding: 10px;
     background: inherit;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid #e5e7eb; //
   }
 `;
 
