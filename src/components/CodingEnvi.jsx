@@ -352,7 +352,9 @@ const CodingEnvi = () => {
 
   const initializeExistingTracks = (room) => {
     if (!room || !room.localParticipant) {
-      console.error("Cannot initialize tracks: Room or local participant not available");
+      console.error(
+        "Cannot initialize tracks: Room or local participant not available"
+      );
       return;
     }
 
@@ -378,10 +380,11 @@ const CodingEnvi = () => {
               trackSid: publication.trackSid,
             };
             if (videoRefs.current[publication.trackSid]) {
-              videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
-              videoRefs.current[publication.trackSid].play().catch((e) =>
-                console.error("Local video play failed:", e)
-              );
+              videoRefs.current[publication.trackSid].srcObject =
+                publication.track.mediaStream;
+              videoRefs.current[publication.trackSid]
+                .play()
+                .catch((e) => console.error("Local video play failed:", e));
             }
           } else if (publication.kind === "audio") {
             newStates[room.localParticipant.identity] = {
@@ -416,10 +419,13 @@ const CodingEnvi = () => {
                   trackSid: publication.trackSid,
                 };
                 if (videoRefs.current[publication.trackSid]) {
-                  videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
-                  videoRefs.current[publication.trackSid].play().catch((e) =>
-                    console.error("Remote video play failed:", e)
-                  );
+                  videoRefs.current[publication.trackSid].srcObject =
+                    publication.track.mediaStream;
+                  videoRefs.current[publication.trackSid]
+                    .play()
+                    .catch((e) =>
+                      console.error("Remote video play failed:", e)
+                    );
                 }
               } else if (publication.kind === "audio") {
                 newStates[participant.identity] = {
@@ -446,7 +452,9 @@ const CodingEnvi = () => {
 
     try {
       setConnectionStatus("connecting");
-      console.log(`Attempting to join room, attempt ${retryCount + 1}/${maxRetries}`);
+      console.log(
+        `Attempting to join room, attempt ${retryCount + 1}/${maxRetries}`
+      );
 
       const token = await getLiveKitToken(sessionId, auth.currentUser.uid);
       const room = new LivekitClient.Room({
@@ -494,7 +502,10 @@ const CodingEnvi = () => {
       console.error("Failed to join room:", error);
       setConnectionStatus("disconnected");
 
-      if (retryCount < maxRetries && error.message.includes("could not establish pc connection")) {
+      if (
+        retryCount < maxRetries &&
+        error.message.includes("could not establish pc connection")
+      ) {
         const delay = Math.pow(2, retryCount) * 1000;
         console.log(`Retrying in ${delay}ms...`);
         setTimeout(() => joinRoom(retryCount + 1, maxRetries), delay);
@@ -572,10 +583,11 @@ const CodingEnvi = () => {
                 },
               }));
               if (videoRefs.current[publication.trackSid]) {
-                videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
-                videoRefs.current[publication.trackSid].play().catch((e) =>
-                  console.error("Video play failed:", e)
-                );
+                videoRefs.current[publication.trackSid].srcObject =
+                  publication.track.mediaStream;
+                videoRefs.current[publication.trackSid]
+                  .play()
+                  .catch((e) => console.error("Video play failed:", e));
               }
             } else if (publication.kind === "audio") {
               setParticipantStates((prev) => ({
@@ -615,11 +627,14 @@ const CodingEnvi = () => {
         }));
         if (videoRefs.current[track.sid]) {
           videoRefs.current[track.sid].srcObject = track.mediaStream;
-          videoRefs.current[track.sid].play().catch((e) =>
-            console.error("Video play failed:", e)
-          );
+          videoRefs.current[track.sid]
+            .play()
+            .catch((e) => console.error("Video play failed:", e));
         }
-      } else if (track.kind === "audio" && participant.identity !== auth.currentUser?.uid) {
+      } else if (
+        track.kind === "audio" &&
+        participant.identity !== auth.currentUser?.uid
+      ) {
         setParticipantStates((prev) => ({
           ...prev,
           [participant.identity]: {
@@ -671,10 +686,11 @@ const CodingEnvi = () => {
           },
         }));
         if (videoRefs.current[publication.trackSid]) {
-          videoRefs.current[publication.trackSid].srcObject = publication.track.mediaStream;
-          videoRefs.current[publication.trackSid].play().catch((e) =>
-            console.error("Video play failed:", e)
-          );
+          videoRefs.current[publication.trackSid].srcObject =
+            publication.track.mediaStream;
+          videoRefs.current[publication.trackSid]
+            .play()
+            .catch((e) => console.error("Video play failed:", e));
         }
       } else if (publication.track.kind === "audio") {
         setParticipantStates((prev) => ({
@@ -923,18 +939,17 @@ const CodingEnvi = () => {
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !auth.currentUser) return;
+  const handleSendMessage = async (message) => {
+    if (!message.trim() || !auth.currentUser) return;
 
     try {
       const messagesRef = collection(db, "sessions", sessionId, "messages");
       await addDoc(messagesRef, {
-        text: newMessage,
+        text: message,
         senderId: auth.currentUser.uid,
         senderName: auth.currentUser.displayName || "Anonymous",
         timestamp: new Date().toISOString(),
       });
-      setNewMessage("");
       scrollToBottom();
     } catch (error) {
       console.error("Error sending message:", error);
@@ -1002,7 +1017,9 @@ const CodingEnvi = () => {
 
   const toggleVideo = async () => {
     if (!room || !room.localParticipant || room.state !== "connected") {
-      console.error("Cannot toggle video: Room not connected or participant unavailable");
+      console.error(
+        "Cannot toggle video: Room not connected or participant unavailable"
+      );
       setVideoEnabled(false);
       setVideoTrackSid(null);
       return;
@@ -1023,9 +1040,12 @@ const CodingEnvi = () => {
           throw new Error("No video track available");
         }
 
-        const publication = await room.localParticipant.publishTrack(videoTrack, {
-          source: LivekitClient.Track.Source.Camera,
-        });
+        const publication = await room.localParticipant.publishTrack(
+          videoTrack,
+          {
+            source: LivekitClient.Track.Source.Camera,
+          }
+        );
         console.log("Video track published:", publication.trackSid);
 
         setVideoEnabled(true);
@@ -1034,13 +1054,16 @@ const CodingEnvi = () => {
         const currentSid = publication.trackSid;
         if (videoRefs.current[currentSid]) {
           videoRefs.current[currentSid].srcObject = stream;
-          videoRefs.current[currentSid].play().catch((e) =>
-            console.error("Video play failed:", e)
-          );
+          videoRefs.current[currentSid]
+            .play()
+            .catch((e) => console.error("Video play failed:", e));
         }
       } else {
         console.log("Disabling video...");
-        console.log("Current tracks:", Array.from(room.localParticipant.tracks?.entries() || []));
+        console.log(
+          "Current tracks:",
+          Array.from(room.localParticipant.tracks?.entries() || [])
+        );
         console.log("Stored videoTrackSid:", videoTrackSid);
 
         let videoPublication = null;
@@ -1050,9 +1073,9 @@ const CodingEnvi = () => {
         }
         if (!videoPublication && room.localParticipant.tracks) {
           // Fallback to any video track
-          videoPublication = Array.from(room.localParticipant.tracks.values()).find(
-            (pub) => pub.kind === "video"
-          );
+          videoPublication = Array.from(
+            room.localParticipant.tracks.values()
+          ).find((pub) => pub.kind === "video");
         }
 
         if (videoPublication && videoPublication.track) {
@@ -1077,7 +1100,9 @@ const CodingEnvi = () => {
           setVideoEnabled(false);
           setVideoTrackSid(null);
         } else {
-          console.warn("No video track found to unpublish, stopping all video tracks...");
+          console.warn(
+            "No video track found to unpublish, stopping all video tracks..."
+          );
           // Fallback: Stop all video tracks
           try {
             const stream = videoRefs.current[videoTrackSid]?.srcObject;
@@ -1101,7 +1126,9 @@ const CodingEnvi = () => {
       setVideoTrackSid(null);
       // Clean up any lingering streams
       if (videoTrackSid && videoRefs.current[videoTrackSid]) {
-        videoRefs.current[videoTrackSid].srcObject?.getTracks().forEach((t) => t.stop());
+        videoRefs.current[videoTrackSid].srcObject
+          ?.getTracks()
+          .forEach((t) => t.stop());
         videoRefs.current[videoTrackSid].srcObject = null;
         delete videoRefs.current[videoTrackSid];
       }
@@ -1110,7 +1137,9 @@ const CodingEnvi = () => {
 
   const toggleMic = async () => {
     if (!room || !room.localParticipant || room.state !== "connected") {
-      console.error("Cannot toggle mic: Room not connected or participant unavailable");
+      console.error(
+        "Cannot toggle mic: Room not connected or participant unavailable"
+      );
       setMicEnabled(false);
       return;
     }
@@ -1243,8 +1272,6 @@ const CodingEnvi = () => {
           setPinnedVideo={setPinnedVideo}
           auth={auth}
           chatMessages={chatMessages}
-          newMessage={newMessage}
-          setNewMessage={setNewMessage}
           handleSendMessage={handleSendMessage}
           newMessageCount={newMessageCount}
           isAtBottom={isAtBottom}
@@ -1266,7 +1293,7 @@ const CodingEnvi = () => {
 
       <PinnedVideo
         pinnedVideo={pinnedVideo}
-        participantStates={participantStates}
+        participantState={participantStates[pinnedVideo]}
         livekitParticipants={livekitParticipants}
         auth={auth}
         pinnedVideoPosition={pinnedVideoPosition}
@@ -1281,11 +1308,3 @@ const CodingEnvi = () => {
     </div>
   );
 };
-
-export default function CodingEnviWrapper() {
-  return (
-    <ThemeProvider defaultTheme="light">
-      <CodingEnvi />
-    </ThemeProvider>
-  );
-}

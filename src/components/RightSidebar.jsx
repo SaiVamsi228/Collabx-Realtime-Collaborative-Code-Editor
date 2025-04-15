@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react"; // Added useState
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { ScrollArea } from "./ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -18,9 +18,7 @@ const RightSidebar = ({
   setPinnedVideo,
   auth,
   chatMessages,
-  newMessage,
-  setNewMessage,
-  handleSendMessage,
+  handleSendMessage, // Keep this prop
   newMessageCount,
   isAtBottom,
   scrollToBottom,
@@ -28,6 +26,7 @@ const RightSidebar = ({
 }) => {
   const chatContainerRef = useRef(null);
   const chatMessagesRef = useRef(null);
+  const [newMessage, setNewMessage] = useState(""); // Local state
 
   const getParticipantName = (identity) => {
     const participant = livekitParticipants[identity];
@@ -86,15 +85,17 @@ const RightSidebar = ({
                       ref={(el) => {
                         if (el && state.trackSid) {
                           videoRefs.current[state.trackSid] = el;
-                          el.srcObject = state.stream;
-                          el.play().catch((e) =>
-                            console.error("Video play failed:", e)
-                          );
+                          if (el.srcObject !== state.stream) {
+                            el.srcObject = state.stream;
+                            el.play().catch((e) =>
+                              console.error("Video play failed:", e)
+                            );
+                          }
                         }
                       }}
                       autoPlay
                       playsInline
-                      muted // Always mute to prevent audio feedback
+                      muted
                       className="w-full h-auto rounded-md"
                     />
                   ) : (
@@ -193,14 +194,18 @@ const RightSidebar = ({
                   onKeyPress={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      handleSendMessage();
+                      handleSendMessage(newMessage); // Pass newMessage
+                      setNewMessage(""); // Clear input
                     }
                   }}
                 />
                 <Button
                   size="sm"
                   className="rounded-lg bg-black text-white hover:bg-gray-900"
-                  onClick={handleSendMessage}
+                  onClick={() => {
+                    handleSendMessage(newMessage); // Pass newMessage
+                    setNewMessage(""); // Clear input
+                  }}
                   disabled={!newMessage.trim()}
                 >
                   Send

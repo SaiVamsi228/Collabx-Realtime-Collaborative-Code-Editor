@@ -1,9 +1,9 @@
-import { useRef } from "react";
+import { useRef, memo } from "react";
 import { PinIcon, VideoOff } from "lucide-react";
 
 const PinnedVideo = ({
   pinnedVideo,
-  participantStates,
+  participantState, // Changed from participantStates to participantState
   livekitParticipants,
   auth,
   pinnedVideoPosition,
@@ -39,11 +39,9 @@ const PinnedVideo = ({
     }
   };
 
-  if (!pinnedVideo || !participantStates[pinnedVideo]) {
+  if (!pinnedVideo || !participantState) {
     return null;
   }
-
-  const state = participantStates[pinnedVideo];
 
   return (
     <div
@@ -56,18 +54,20 @@ const PinnedVideo = ({
       }}
       onMouseDown={handleMouseDown}
     >
-      {state.videoEnabled && state.stream ? (
+      {participantState.videoEnabled && participantState.stream ? (
         <video
           ref={(el) => {
-            if (el && state.trackSid) {
-              videoRefs.current[state.trackSid] = el;
-              el.srcObject = state.stream;
-              el.play().catch((e) => console.error("Pinned video play failed:", e));
+            if (el && participantState.trackSid) {
+              videoRefs.current[participantState.trackSid] = el;
+              if (el.srcObject !== participantState.stream) {
+                el.srcObject = participantState.stream;
+                el.play().catch((e) => console.error("Pinned video play failed:", e));
+              }
             }
           }}
           autoPlay
           playsInline
-          muted // Always mute to prevent audio feedback
+          muted
           className="w-full h-full rounded-md object-cover"
         />
       ) : (
@@ -76,9 +76,9 @@ const PinnedVideo = ({
         </div>
       )}
       <div className="absolute bottom-2 left-2 bg-background/80 px-2 py-1 rounded text-xs">
-        {state.identity === auth.currentUser?.uid
+        {participantState.identity === auth.currentUser?.uid
           ? "You"
-          : getParticipantName(state.identity)}
+          : getParticipantName(participantState.identity)}
       </div>
       <div className="absolute top-2 right-2 flex gap-1">
         <button
@@ -92,4 +92,15 @@ const PinnedVideo = ({
   );
 };
 
-export default PinnedVideo;
+// Memoize and add custom prop comparison
+export default memo(PinnedVideo, (prevProps, nextProps) => {
+  return (
+    prevProps.pinnedVideo === nextProps.pinnedVideo &&
+    prevProps.participantState === nextProps.participantState &&
+    prevProps.pinnedVideoPosition.x === nextProps.pinnedVideoPosition.x &&
+    prevProps.pinnedVideoPosition.y === nextProps.pinnedVideoPosition.y &&
+    prevProps.isDragging === nextProps.isDragging &&
+    prevProps.dragOffset.x === nextProps.dragOffset.x &&
+    prevProps.dragOffset.y === nextProps.dragOffset.y
+  );
+});
