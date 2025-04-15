@@ -1308,3 +1308,12 @@ const CodingEnvi = () => {
     </div>
   );
 };
+
+
+export default function CodingEnviWithTheme() {
+  return (
+    <ThemeProvider defaultTheme="light">
+      <CodingEnvi />
+    </ThemeProvider>
+  );
+}
