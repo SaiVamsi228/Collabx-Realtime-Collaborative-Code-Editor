@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import NightOwl from "monaco-themes/themes/Night Owl.json";
 import LeftSidebar from "./LeftSidebar";
 import TopBar from "./TopBar";
@@ -232,7 +232,7 @@ const CodingEnvi = () => {
   const [rightSidebarTab, setRightSidebarTab] = useState("video");
   const [micEnabled, setMicEnabled] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(false);
-  const [videoTrackSid, setVideoTrackSid] = useState(null);
+  const [videoTrackSid, setVideoTrackSid] = useState(null); // New state to track video track SID
   const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
   const [previousLanguage, setPreviousLanguage] = useState(initialLanguage);
   const [codeOutput, setCodeOutput] = useState(null);
@@ -350,7 +350,7 @@ const CodingEnvi = () => {
     return () => unsubscribe();
   }, [sessionId, isAtBottom]);
 
-  const initializeExistingTracks = useCallback((room) => {
+  const initializeExistingTracks = (room) => {
     if (!room || !room.localParticipant) {
       console.error("Cannot initialize tracks: Room or local participant not available");
       return;
@@ -436,12 +436,10 @@ const CodingEnvi = () => {
     }
 
     setParticipantStates(newStates);
-  }, [participantStates]);
+  };
 
-  const joinRoom = useCallback(async (retryCount = 0, maxRetries = 3) => {
-    if (!auth.currentUser || !
-
-sessionId) {
+  const joinRoom = async (retryCount = 0, maxRetries = 3) => {
+    if (!auth.currentUser || !sessionId) {
       console.error("Cannot join room: Missing auth or sessionId");
       return;
     }
@@ -505,7 +503,7 @@ sessionId) {
         setError("Failed to connect to video chat. Please try again later.");
       }
     }
-  }, [sessionId, initializeExistingTracks]);
+  };
 
   useEffect(() => {
     joinRoom();
@@ -516,9 +514,9 @@ sessionId) {
         room.disconnect();
       }
     };
-  }, [joinRoom, room]);
+  }, [sessionId]);
 
-  const cleanupSession = useCallback(() => {
+  const cleanupSession = () => {
     setParticipantStates({});
     Object.keys(videoRefs.current).forEach((sid) => {
       if (videoRefs.current[sid]) {
@@ -527,7 +525,7 @@ sessionId) {
     });
     videoRefs.current = {};
     setPinnedVideo(null);
-    setVideoTrackSid(null);
+    setVideoTrackSid(null); // Clear video track SID
 
     if (bindingRef.current) {
       bindingRef.current.destroy();
@@ -542,7 +540,7 @@ sessionId) {
       yDocRef.current = null;
     }
     editTimeouts.current.clear();
-  }, []);
+  };
 
   useEffect(() => {
     if (!room) return;
@@ -704,7 +702,7 @@ sessionId) {
         if (videoRefs.current[publication.trackSid]) {
           videoRefs.current[publication.trackSid].srcObject = null;
         }
-        setVideoTrackSid(null);
+        setVideoTrackSid(null); // Clear video track SID
       } else if (publication.track.kind === "audio") {
         setParticipantStates((prev) => ({
           ...prev,
@@ -742,7 +740,7 @@ sessionId) {
       room.off("localTrackUnpublished", handleLocalTrackUnpublished);
       room.off("disconnected", handleDisconnected);
     };
-  }, [room, pinnedVideo, cleanupSession, joinRoom]);
+  }, [room, pinnedVideo]);
 
   const livekitParticipants = useMemo(() => {
     if (!room || !room.participants) return {};
@@ -756,7 +754,7 @@ sessionId) {
     return participants;
   }, [room]);
 
-  const initializeYjs = useCallback((language) => {
+  const initializeYjs = (language) => {
     if (!editorRef.current || !monacoRef.current) return;
 
     if (bindingRef.current) bindingRef.current.destroy();
@@ -834,15 +832,15 @@ sessionId) {
     editor.onDidChangeCursorSelection((e) =>
       updateCursorPosition(e.selection.getPosition())
     );
-  }, [sessionId]);
+  };
 
-  const handleEditorDidMount = useCallback((editor, monaco) => {
+  const handleEditorDidMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
     monaco.editor.defineTheme("night-owl", NightOwl);
     setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
     setIsEditorReady(true);
-  }, [theme]);
+  };
 
   useEffect(() => {
     if (isEditorReady && editorRef.current && monacoRef.current) {
@@ -881,7 +879,7 @@ sessionId) {
       if (yDocRef.current) yDocRef.current.destroy();
       editTimeouts.current.clear();
     };
-  }, [isEditorReady, selectedLanguage, initializeYjs, location.state]);
+  }, [isEditorReady, selectedLanguage, sessionId]);
 
   useEffect(() => {
     if (monacoRef.current) {
@@ -892,7 +890,7 @@ sessionId) {
     setMonacoTheme(theme === "dark" ? "night-owl" : "vs-light");
   }, [theme]);
 
-  const handleRunCode = useCallback(async (stdin = "") => {
+  const handleRunCode = async (stdin = "") => {
     try {
       setIsLoading(true);
       setError(null);
@@ -923,9 +921,9 @@ sessionId) {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedLanguage]);
+  };
 
-  const handleSendMessage = useCallback(async () => {
+  const handleSendMessage = async () => {
     if (!newMessage.trim() || !auth.currentUser) return;
 
     try {
@@ -941,9 +939,9 @@ sessionId) {
     } catch (error) {
       console.error("Error sending message:", error);
     }
-  }, [newMessage, sessionId]);
+  };
 
-  const handleMouseMove = useCallback((e) => {
+  const handleMouseMove = (e) => {
     if (isDragging) {
       const newX = Math.max(
         0,
@@ -955,35 +953,35 @@ sessionId) {
       );
       setPinnedVideoPosition({ x: newX, y: newY });
     }
-  }, [isDragging, dragOffset]);
+  };
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = () => {
     setIsDragging(false);
-  }, []);
+  };
 
-  const toggleTheme = useCallback(() => {
+  const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
-  }, [theme]);
+  };
 
-  const handleResizeStart = useCallback((e) => {
+  const handleResizeStart = (e) => {
     e.preventDefault();
     setIsResizing(true);
-  }, []);
+  };
 
-  const handleResizeMove = useCallback((e) => {
+  const handleResizeMove = (e) => {
     if (isResizing) {
       const newHeight = window.innerHeight - e.clientY;
       setNotesHeight(
         Math.max(100, Math.min(newHeight, window.innerHeight - 200))
       );
     }
-  }, [isResizing]);
+  };
 
-  const handleResizeEnd = useCallback(() => {
+  const handleResizeEnd = () => {
     setIsResizing(false);
-  }, []);
+  };
 
-  const handleChatScroll = useCallback(() => {
+  const handleChatScroll = () => {
     if (chatMessagesRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = chatMessagesRef.current;
       const isAtBottom =
@@ -993,16 +991,16 @@ sessionId) {
         setNewMessageCount(0);
       }
     }
-  }, []);
+  };
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = () => {
     if (chatMessagesRef.current) {
       chatMessagesRef.current.scrollTop = 0;
       setNewMessageCount(0);
     }
-  }, []);
+  };
 
-  const toggleVideo = useCallback(async () => {
+  const toggleVideo = async () => {
     if (!room || !room.localParticipant || room.state !== "connected") {
       console.error("Cannot toggle video: Room not connected or participant unavailable");
       setVideoEnabled(false);
@@ -1031,7 +1029,7 @@ sessionId) {
         console.log("Video track published:", publication.trackSid);
 
         setVideoEnabled(true);
-        setVideoTrackSid(publication.trackSid);
+        setVideoTrackSid(publication.trackSid); // Store track SID
 
         const currentSid = publication.trackSid;
         if (videoRefs.current[currentSid]) {
@@ -1047,9 +1045,11 @@ sessionId) {
 
         let videoPublication = null;
         if (videoTrackSid && room.localParticipant.tracks) {
+          // Try to find by stored trackSid
           videoPublication = room.localParticipant.tracks.get(videoTrackSid);
         }
         if (!videoPublication && room.localParticipant.tracks) {
+          // Fallback to any video track
           videoPublication = Array.from(room.localParticipant.tracks.values()).find(
             (pub) => pub.kind === "video"
           );
@@ -1078,6 +1078,7 @@ sessionId) {
           setVideoTrackSid(null);
         } else {
           console.warn("No video track found to unpublish, stopping all video tracks...");
+          // Fallback: Stop all video tracks
           try {
             const stream = videoRefs.current[videoTrackSid]?.srcObject;
             if (stream) {
@@ -1098,15 +1099,16 @@ sessionId) {
       console.error("Error toggling video:", error);
       setVideoEnabled(false);
       setVideoTrackSid(null);
+      // Clean up any lingering streams
       if (videoTrackSid && videoRefs.current[videoTrackSid]) {
         videoRefs.current[videoTrackSid].srcObject?.getTracks().forEach((t) => t.stop());
         videoRefs.current[videoTrackSid].srcObject = null;
         delete videoRefs.current[videoTrackSid];
       }
     }
-  }, [room, videoEnabled, videoTrackSid]);
+  };
 
-  const toggleMic = useCallback(async () => {
+  const toggleMic = async () => {
     if (!room || !room.localParticipant || room.state !== "connected") {
       console.error("Cannot toggle mic: Room not connected or participant unavailable");
       setMicEnabled(false);
@@ -1142,7 +1144,7 @@ sessionId) {
       console.error("Error toggling mic:", error);
       setMicEnabled(false);
     }
-  }, [room, micEnabled]);
+  };
 
   useEffect(() => {
     window.addEventListener("mousemove", handleResizeMove);
@@ -1151,87 +1153,25 @@ sessionId) {
       window.removeEventListener("mousemove", handleResizeMove);
       window.removeEventListener("mouseup", handleResizeEnd);
     };
-  }, [handleResizeMove, handleResizeEnd]);
+  }, [isResizing]);
 
   useEffect(() => {
     if (chatMessagesRef.current && chatMessages.length > 0) {
       scrollToBottom();
     }
-  }, [chatMessages, scrollToBottom]);
+  }, []);
 
   if (isAuthenticated === undefined) {
     return <div>Loading...</div>;
   }
 
-  const pinnedVideoProps = useMemo(() => ({
-    pinnedVideo,
-    participantStates,
-    livekitParticipants,
-    auth,
-    pinnedVideoPosition,
-    setPinnedVideoPosition,
-    setPinnedVideo,
-    videoRefs,
-    isDragging,
-    setIsDragging,
-    dragOffset,
-    setDragOffset,
-  }), [
-    pinnedVideo,
-    participantStates,
-    livekitParticipants,
-    auth,
-    pinnedVideoPosition,
-    setPinnedVideoPosition,
-    setPinnedVideo,
-    videoRefs,
-    isDragging,
-    setIsDragging,
-    dragOffset,
-    setDragOffset,
-  ]);
-
-  const rightSidebarProps = useMemo(() => ({
-    theme,
-    rightSidebarOpen,
-    rightSidebarTab,
-    setRightSidebarTab,
-    participantStates,
-    livekitParticipants,
-    pinnedVideo,
-    setPinnedVideo,
-    auth,
-    chatMessages,
-    newMessage,
-    setNewMessage,
-    handleSendMessage,
-    newMessageCount,
-    isAtBottom,
-    scrollToBottom,
-    videoRefs,
-  }), [
-    theme,
-    rightSidebarOpen,
-    rightSidebarTab,
-    setRightSidebarTab,
-    participantStates,
-    livekitParticipants,
-    pinnedVideo,
-    setPinnedVideo,
-    auth,
-    chatMessages,
-    newMessage,
-    setNewMessage,
-    handleSendMessage,
-    newMessageCount,
-    isAtBottom,
-    scrollToBottom,
-    videoRefs,
-  ]);
-
   return (
     <div
-      className={`flex flex-col h-screen coding-envi ${theme === "dark" ? "dark" : ""}`}
+      className={`flex flex-col h-screen coding-envi ${
+        theme === "dark" ? "dark" : ""
+      }`}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
     >
       <TopBar
         theme={theme}
@@ -1292,7 +1232,25 @@ sessionId) {
           handleEditorDidMount={handleEditorDidMount}
         />
 
-        <RightSidebar {...rightSidebarProps} />
+        <RightSidebar
+          theme={theme}
+          rightSidebarOpen={rightSidebarOpen}
+          rightSidebarTab={rightSidebarTab}
+          setRightSidebarTab={setRightSidebarTab}
+          participantStates={participantStates}
+          livekitParticipants={livekitParticipants}
+          pinnedVideo={pinnedVideo}
+          setPinnedVideo={setPinnedVideo}
+          auth={auth}
+          chatMessages={chatMessages}
+          newMessage={newMessage}
+          setNewMessage={setNewMessage}
+          handleSendMessage={handleSendMessage}
+          newMessageCount={newMessageCount}
+          isAtBottom={isAtBottom}
+          scrollToBottom={scrollToBottom}
+          videoRefs={videoRefs}
+        />
       </div>
 
       <BottomBar
@@ -1306,7 +1264,20 @@ sessionId) {
         navigate={navigate}
       />
 
-      <PinnedVideo {...pinnedVideoProps} />
+      <PinnedVideo
+        pinnedVideo={pinnedVideo}
+        participantStates={participantStates}
+        livekitParticipants={livekitParticipants}
+        auth={auth}
+        pinnedVideoPosition={pinnedVideoPosition}
+        setPinnedVideoPosition={setPinnedVideoPosition}
+        setPinnedVideo={setPinnedVideo}
+        videoRefs={videoRefs}
+        isDragging={isDragging}
+        setIsDragging={setIsDragging}
+        dragOffset={dragOffset}
+        setDragOffset={setDragOffset}
+      />
     </div>
   );
 };
