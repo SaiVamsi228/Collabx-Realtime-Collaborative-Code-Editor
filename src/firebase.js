@@ -14,13 +14,13 @@ import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore"; // Add Firestore
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDpdS8FgbNqWmTtlRLBw7onOVdK2rW7bgE",
-  authDomain: "rtce-4df05.firebaseapp.com",
-  projectId: "rtce-4df05",
-  storageBucket: "rtce-4df05.firebasestorage.app",
-  messagingSenderId: "634860330071",
-  appId: "1:634860330071:web:fcd4187460a85517005712",
-  measurementId: "G-2M9J12VWRM",
+  apiKey: `${import.meta.env.VITE_FIREBASE_API_KEY}`,
+  authDomain: `${import.meta.env.VITE_FIREBASE_AUTH_DOMAIN}`,
+  projectId: `${import.meta.env.VITE_FIREBASE_PROJECT_ID}`,
+  storageBucket: `${import.meta.env.VITE_FIREBASE_STORAGE_BUCKET}`,
+  messagingSenderId: `${import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID}`,
+  appId: `${import.meta.env.VITE_FIREBASE_APP_ID}`,
+  measurementId: `${import.meta.env.VITE_FIREBASE_MEASUREMENT_ID}`
 };
 
 const app = initializeApp(firebaseConfig);

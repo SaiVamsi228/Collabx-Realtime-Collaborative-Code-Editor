@@ -1,7 +1,7 @@
 import axios from "axios";
 
-const API_KEY = "d927f36777msh858985351b063fap15e36djsnabd6122f9df2"; // Use environment variables in production
-const API_ENDPOINT = "https://judge0-ce.p.rapidapi.com";
+const API_KEY = `${import.meta.env.VITE_JUDGE0_KEY}`; // Use environment variables in production
+const API_ENDPOINT = `${import.meta.env.VITE_JUDGE0_URL}`;
 
 const languageToJudge0Id = {
   javascript: 63,

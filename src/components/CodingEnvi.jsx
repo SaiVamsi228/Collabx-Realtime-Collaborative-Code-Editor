@@ -202,7 +202,7 @@ document.head.appendChild(styleSheet);
 
 const getLiveKitToken = async (roomName, participantName) => {
   const response = await fetch(
-    `https://livekit-token-server-production.up.railway.app/get-token?roomName=${encodeURIComponent(
+    `${import.meta.env.VITE_LIVEKIT_TOKEN_URL}/get-token?roomName=${encodeURIComponent(
       roomName
     )}&participantName=${encodeURIComponent(participantName)}`
   );
@@ -466,7 +466,7 @@ const CodingEnvi = () => {
       });
 
       await room.connect(
-        "wss://video-chat-application-7u5wc7ae.livekit.cloud",
+        `${import.meta.env.VITE_LIVEKIT_URL}`,
         token,
         {
           autoSubscribe: true,
@@ -777,7 +777,7 @@ const CodingEnvi = () => {
 
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
-    const wsUrl = `wss://web-socket-server-production-bbc3.up.railway.app/?sessionId=${encodedSessionId}`;
+    const wsUrl = `${import.meta.env.VITE_WEBSOCKET_URL}/?sessionId=${encodedSessionId}`;
 
     const yDoc = new Y.Doc();
     yDocRef.current = yDoc;
