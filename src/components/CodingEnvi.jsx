@@ -194,6 +194,20 @@ const styles = `
     background: inherit;
     border-top: 1px solid #e5e7eb;
   }
+    .active-status {
+    position: relative;
+  }
+  .active-status::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 8px;
+    padding: 2px;
+    background: linear-gradient(45deg, #00ff00, #00cc00, #009900, #00ff00);
+    background-size: 200% 200%;
+    animation: rotateGradient 2s linear infinite;
+    z-index: -1;
+  }
 `;
 
 const styleSheet = document.createElement("style");
@@ -202,7 +216,9 @@ document.head.appendChild(styleSheet);
 
 const getLiveKitToken = async (roomName, participantName) => {
   const response = await fetch(
-    `${import.meta.env.VITE_LIVEKIT_TOKEN_URL}/get-token?roomName=${encodeURIComponent(
+    `${
+      import.meta.env.VITE_LIVEKIT_TOKEN_URL
+    }/get-token?roomName=${encodeURIComponent(
       roomName
     )}&participantName=${encodeURIComponent(participantName)}`
   );
@@ -467,13 +483,9 @@ const CodingEnvi = () => {
         },
       });
 
-      await room.connect(
-        `${import.meta.env.VITE_LIVEKIT_URL}`,
-        token,
-        {
-          autoSubscribe: true,
-        }
-      );
+      await room.connect(`${import.meta.env.VITE_LIVEKIT_URL}`, token, {
+        autoSubscribe: true,
+      });
       console.log("Successfully connected to room");
 
       try {
@@ -793,9 +805,13 @@ const CodingEnvi = () => {
 
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
-    const wsUrl = `${import.meta.env.VITE_WEBSOCKET_URL}/?sessionId=${encodedSessionId}`;
+    const wsUrl = `${
+      import.meta.env.VITE_WEBSOCKET_URL
+    }/?sessionId=${encodedSessionId}`;
 
-    console.log(`Initializing Yjs for session: ${fullSessionId}, URL: ${wsUrl}`);
+    console.log(
+      `Initializing Yjs for session: ${fullSessionId}, URL: ${wsUrl}`
+    );
     setWebsocketStatus("connecting");
 
     const yDoc = new Y.Doc();
@@ -817,9 +833,7 @@ const CodingEnvi = () => {
     });
 
     providerRef.current.on("synced", ({ synced }) => {
-      console.log(
-        `Yjs synced: ${synced} for session: ${fullSessionId}`
-      );
+      console.log(`Yjs synced: ${synced} for session: ${fullSessionId}`);
       if (synced) {
         setWebsocketStatus("connected");
       }
@@ -831,10 +845,7 @@ const CodingEnvi = () => {
     });
 
     providerRef.current.on("error", (error) => {
-      console.error(
-        `WebSocket error for session: ${fullSessionId}`,
-        error
-      );
+      console.error(`WebSocket error for session: ${fullSessionId}`, error);
       setWebsocketStatus("error");
       setError(`WebSocket connection failed: ${error.message}`);
     });
@@ -1253,6 +1264,7 @@ const CodingEnvi = () => {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
+      // Inside CodingEnvi component, update the TopBar render
       <TopBar
         theme={theme}
         leftSidebarOpen={leftSidebarOpen}
@@ -1273,8 +1285,8 @@ const CodingEnvi = () => {
         settingsExpanded={settingsExpanded}
         sessionId={sessionId}
         languages={languages}
+        websocketStatus={websocketStatus} // Add this prop
       />
-
       <div className="flex flex-1 overflow-hidden">
         <LeftSidebar
           theme={theme}
@@ -1330,7 +1342,6 @@ const CodingEnvi = () => {
           videoRefs={videoRefs}
         />
       </div>
-
       <BottomBar
         theme={theme}
         micEnabled={micEnabled}
@@ -1341,7 +1352,6 @@ const CodingEnvi = () => {
         cleanupSession={cleanupSession}
         navigate={navigate}
       />
-
       <PinnedVideo
         pinnedVideo={pinnedVideo}
         participantState={participantStates[pinnedVideo]}
