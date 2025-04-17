@@ -1264,7 +1264,6 @@ const CodingEnvi = () => {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      // Inside CodingEnvi component, update the TopBar render
       <TopBar
         theme={theme}
         leftSidebarOpen={leftSidebarOpen}
