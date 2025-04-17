@@ -192,7 +192,7 @@ const styles = `
     bottom: 0;
     padding: 10px;
     background: inherit;
-    border-top: 1px solid #e5e7eb; //
+    border-top: 1px solid #e5e7eb;
   }
 `;
 
@@ -232,7 +232,7 @@ const CodingEnvi = () => {
   const [rightSidebarTab, setRightSidebarTab] = useState("video");
   const [micEnabled, setMicEnabled] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState(false);
-  const [videoTrackSid, setVideoTrackSid] = useState(null); // New state to track video track SID
+  const [videoTrackSid, setVideoTrackSid] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState(initialLanguage);
   const [previousLanguage, setPreviousLanguage] = useState(initialLanguage);
   const [codeOutput, setCodeOutput] = useState(null);
@@ -265,6 +265,8 @@ const CodingEnvi = () => {
   const [participantStates, setParticipantStates] = useState({});
   const [newMessageCount, setNewMessageCount] = useState(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  // New state for WebSocket status
+  const [websocketStatus, setWebsocketStatus] = useState("disconnected");
 
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
@@ -536,7 +538,7 @@ const CodingEnvi = () => {
     });
     videoRefs.current = {};
     setPinnedVideo(null);
-    setVideoTrackSid(null); // Clear video track SID
+    setVideoTrackSid(null);
 
     if (bindingRef.current) {
       bindingRef.current.destroy();
@@ -718,7 +720,7 @@ const CodingEnvi = () => {
         if (videoRefs.current[publication.trackSid]) {
           videoRefs.current[publication.trackSid].srcObject = null;
         }
-        setVideoTrackSid(null); // Clear video track SID
+        setVideoTrackSid(null);
       } else if (publication.track.kind === "audio") {
         setParticipantStates((prev) => ({
           ...prev,
@@ -771,19 +773,70 @@ const CodingEnvi = () => {
   }, [room]);
 
   const initializeYjs = (language) => {
-    if (!editorRef.current || !monacoRef.current) return;
+    if (!editorRef.current || !monacoRef.current) {
+      console.warn("Cannot initialize Yjs: Editor or Monaco not ready");
+      return;
+    }
 
-    if (bindingRef.current) bindingRef.current.destroy();
+    if (bindingRef.current) {
+      bindingRef.current.destroy();
+      console.log("Destroyed existing MonacoBinding");
+    }
+    if (providerRef.current) {
+      providerRef.current.destroy();
+      console.log("Destroyed existing WebsocketProvider");
+    }
+    if (yDocRef.current) {
+      yDocRef.current.destroy();
+      console.log("Destroyed existing Y.Doc");
+    }
 
     const fullSessionId = `${sessionId}-${language}`;
     const encodedSessionId = encodeURIComponent(fullSessionId);
     const wsUrl = `${import.meta.env.VITE_WEBSOCKET_URL}/?sessionId=${encodedSessionId}`;
+
+    console.log(`Initializing Yjs for session: ${fullSessionId}, URL: ${wsUrl}`);
+    setWebsocketStatus("connecting");
 
     const yDoc = new Y.Doc();
     yDocRef.current = yDoc;
 
     providerRef.current = new WebsocketProvider(wsUrl, fullSessionId, yDoc, {
       resyncInterval: 2000,
+    });
+
+    // WebSocket connection status logging
+    providerRef.current.on("connect", () => {
+      console.log(`WebSocket connected for session: ${fullSessionId}`);
+      setWebsocketStatus("connected");
+    });
+
+    providerRef.current.on("status", ({ status }) => {
+      console.log(`WebSocket status: ${status} for session: ${fullSessionId}`);
+      setWebsocketStatus(status);
+    });
+
+    providerRef.current.on("synced", ({ synced }) => {
+      console.log(
+        `Yjs synced: ${synced} for session: ${fullSessionId}`
+      );
+      if (synced) {
+        setWebsocketStatus("connected");
+      }
+    });
+
+    providerRef.current.on("disconnect", () => {
+      console.warn(`WebSocket disconnected for session: ${fullSessionId}`);
+      setWebsocketStatus("disconnected");
+    });
+
+    providerRef.current.on("error", (error) => {
+      console.error(
+        `WebSocket error for session: ${fullSessionId}`,
+        error
+      );
+      setWebsocketStatus("error");
+      setError(`WebSocket connection failed: ${error.message}`);
     });
 
     const yText = yDoc.getText("monaco");
@@ -848,6 +901,8 @@ const CodingEnvi = () => {
     editor.onDidChangeCursorSelection((e) =>
       updateCursorPosition(e.selection.getPosition())
     );
+
+    console.log(`Yjs initialized for session: ${fullSessionId}`);
   };
 
   const handleEditorDidMount = (editor, monaco) => {
@@ -1049,7 +1104,7 @@ const CodingEnvi = () => {
         console.log("Video track published:", publication.trackSid);
 
         setVideoEnabled(true);
-        setVideoTrackSid(publication.trackSid); // Store track SID
+        setVideoTrackSid(publication.trackSid);
 
         const currentSid = publication.trackSid;
         if (videoRefs.current[currentSid]) {
@@ -1068,11 +1123,9 @@ const CodingEnvi = () => {
 
         let videoPublication = null;
         if (videoTrackSid && room.localParticipant.tracks) {
-          // Try to find by stored trackSid
           videoPublication = room.localParticipant.tracks.get(videoTrackSid);
         }
         if (!videoPublication && room.localParticipant.tracks) {
-          // Fallback to any video track
           videoPublication = Array.from(
             room.localParticipant.tracks.values()
           ).find((pub) => pub.kind === "video");
@@ -1103,7 +1156,6 @@ const CodingEnvi = () => {
           console.warn(
             "No video track found to unpublish, stopping all video tracks..."
           );
-          // Fallback: Stop all video tracks
           try {
             const stream = videoRefs.current[videoTrackSid]?.srcObject;
             if (stream) {
@@ -1124,7 +1176,6 @@ const CodingEnvi = () => {
       console.error("Error toggling video:", error);
       setVideoEnabled(false);
       setVideoTrackSid(null);
-      // Clean up any lingering streams
       if (videoTrackSid && videoRefs.current[videoTrackSid]) {
         videoRefs.current[videoTrackSid].srcObject
           ?.getTracks()
@@ -1308,7 +1359,6 @@ const CodingEnvi = () => {
     </div>
   );
 };
-
 
 export default function CodingEnviWithTheme() {
   return (
