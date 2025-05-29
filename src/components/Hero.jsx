@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import Typed from "typed.js";
+import { Link } from "react-router-dom"; // Ensure this import is present
 import { Button } from "@/components/ui/Button";
 import { ArrowRight } from "lucide-react";
 
@@ -24,10 +25,11 @@ export default function Hero() {
   }, []);
 
   return (
-    <section 
-      className="min-h-screen pt-20" 
+    <section
+      className="min-h-screen pt-20"
       style={{
-        background: "linear-gradient(to bottom right, #1e1e1e 5%, #3a3a3a 15%, #E3E3E4 90%)"
+        background:
+          "linear-gradient(to bottom right, #1e1e1e 5%, #3a3a3a 15%, #E3E3E4 90%)",
       }}
     >
       <div className="container mx-auto px-4 py-16 md:py-24 flex flex-col md:flex-row items-center">
@@ -45,10 +47,13 @@ export default function Hero() {
             Pair program, debug together, and share knowledge in real-time with
             integrated video chat and multi-language support.
           </p>
-          <Button className="bg-slate-50 text-gray-800 hover:bg-gray-100 hover:translate-y-[-2px] transition-all text-lg px-7 py-5 h-auto font-550 rounded-lg ">
+          <Link
+            to="/auth"
+            className="bg-slate-50 text-gray-800 hover:bg-gray-100 hover:translate-y-[-2px] transition-all text-lg px-7 py-5 h-auto font-550 rounded-lg flex items-center"
+          >
             Start Coding Now
             <ArrowRight className="ml-2 h-5 w-5" />
-          </Button>
+          </Link>
         </div>
         {/* Code Editor Section */}
         <div className="w-full md:w-1/2">

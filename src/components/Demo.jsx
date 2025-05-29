@@ -28,7 +28,6 @@ export default function Demo() {
             <div className="aspect-video bg-slate-800 rounded-lg overflow-hidden relative">
               <img
                 src="/placeholder.svg"
-                alt="CollabX Demo Video"
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 flex items-center justify-center">
