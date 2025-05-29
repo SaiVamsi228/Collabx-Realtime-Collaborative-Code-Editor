@@ -11,7 +11,7 @@ import {
 import { auth, db } from "../firebase.js";
 import { signOut } from "firebase/auth";
 import { doc, setDoc, collection, onSnapshot } from "firebase/firestore";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 function SessionManager() {
   const [activeTab, setActiveTab] = useState("public");
@@ -114,8 +114,14 @@ function SessionManager() {
     <div className="bg-white min-h-screen">
       <div className="fixed top-0 left-0 right-0 bg-white shadow-sm z-10">
         <header className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="text-[1.8rem] font-bold text-primary">
-            <div className="w-[215px] h-[50px] bg-transparent" />
+          <div className="flex items-center">
+            <Link to="/">
+              <img
+                src="./MY-FULL-LOGO.svg"
+                alt="CollabX Logo"
+                className="w-[215px] h-[50px] cursor-pointer"
+              />
+            </Link>
           </div>
           <button
             onClick={handleLogout}

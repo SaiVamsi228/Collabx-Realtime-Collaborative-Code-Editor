@@ -12,16 +12,13 @@ export default function CTA() {
           projects.
         </p>
         <Button className="relative overflow-hidden bg-background text-primary border border-primary text-lg px-6 py-6 font-semibold h-auto rounded-2xl transition-all group">
-          <Link
-            to="/auth"
-            className="flex items-center relative group-hover:text-white"
-          >
-            <span className="absolute inset-0 bg-[#150f37] scale-x-0 origin-left transition-transform duration-300 group-hover:scale-x-100"></span>
-            <span className="relative flex items-center">
+          <span className="absolute inset-0 bg-[#150f37] scale-x-0 origin-left transition-transform duration-300 group-hover:scale-x-100"></span>
+          <span className="relative flex items-center group-hover:text-white">
+            <Link to="/auth" className="flex items-center">
               Start Coding Now
               <ArrowRight className="ml-2 h-5 w-5" />
-            </span>
-          </Link>
+            </Link>
+          </span>
         </Button>
       </div>
     </section>
