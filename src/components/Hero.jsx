@@ -47,13 +47,12 @@ export default function Hero() {
             Pair program, debug together, and share knowledge in real-time with
             integrated video chat and multi-language support.
           </p>
-          <Link
-            to="/auth"
-            className="bg-slate-50 text-gray-800 hover:bg-gray-100 hover:translate-y-[-2px] transition-all text-lg px-7 py-5 h-auto font-550 rounded-lg flex items-center"
-          >
-            Start Coding Now
-            <ArrowRight className="ml-2 h-5 w-5" />
-          </Link>
+          <Button className="bg-slate-50 text-gray-800 hover:bg-gray-100 hover:translate-y-[-2px] transition-all text-lg px-7 py-5 h-auto font-550 rounded-lg flex items-center">
+            <Link to="/auth" className="flex items-center">
+              Start Coding Now
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Link>
+          </Button>
         </div>
         {/* Code Editor Section */}
         <div className="w-full md:w-1/2">
