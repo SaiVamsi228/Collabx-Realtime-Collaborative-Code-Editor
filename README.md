@@ -19,8 +19,8 @@ In a remote-first world, teams need powerful tools to bring them closer. Collabx
 
 - **Frontend:** React, Vite
 - **Backend:** Node.js, WebSocket (for real-time collaboration)
-- **Database:** MongoDB / PostgreSQL (for storing sessions and user data)
-- **Authentication:** JWT / OAuth
+- **Database:** MongoDB / Firebase (for storing sessions and user data)
+- **Authentication:** JWT 
 
 ## 📦 Getting Started
 
